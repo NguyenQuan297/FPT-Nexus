@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+backend/uploads/
+frontend/node_modules/
+frontend/dist/
+*.xlsx~
+.DS_Store
+.idea/
