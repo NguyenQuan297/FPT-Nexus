@@ -6,6 +6,7 @@ from app.api.v1 import (
     notifications,
     realtime,
     reports,
+    settings,
     sync,
     system_ops,
     upload,
@@ -22,3 +23,4 @@ router.include_router(notifications.router)
 router.include_router(realtime.router)
 router.include_router(sync.router)
 router.include_router(system_ops.router)
+router.include_router(settings.router)

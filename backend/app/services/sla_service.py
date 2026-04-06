@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.core.constants import LEAD_STATUS_LATE
 from app.repositories.lead_repository import LeadRepository
 from app.realtime.events import publish_event
-from app.services import excel_sync_service, notify_service
+from app.services import excel_sync_service, notification_copy, notify_service
 
 log = logging.getLogger(__name__)
 
@@ -63,10 +63,10 @@ async def run_sla_pass(db: AsyncSession) -> int:
             created = created.replace(tzinfo=timezone.utc)
         if now <= sla_deadline(created, lead.sla_hours_at_ingest or settings.sla_hours):
             continue
-        summary = f"{lead.name or '-'} | {lead.phone or '-'} | id={lead.id}"
+        summary = notification_copy.sla_lead_one_line(lead)
         extra: dict = {"status": LEAD_STATUS_LATE}
         if lead.last_alert_sent_at is None:
-            notify_service.notify_sla_violation_sync(summary)
+            await notify_service.notify_sla_violation_async(db, summary)
             extra["last_alert_sent_at"] = now
         await repo.update_lead(db, lead, **extra)
         await publish_event(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import logging
 import re
+import unicodedata
 import uuid
 from datetime import datetime, timezone
 from typing import Any, List
@@ -27,16 +28,31 @@ MAX_ROWS = 50_000
 COLUMN_ALIASES = {
     "external_id": ["Mã KH", "Mã khách hàng", "Mã khách hàng CRM"],
     "name": ["Tên Học Sinh", "Tên học sinh", "Tên KH", "Name"],
-    "phone": ["Điện thoại phụ huynh", "Số điện thoại", "Điện thoại", "Phone"],
+    "phone": ["Điện thoại phụ huynh", "Số điện thoại", "Điện thoại", "Phone", "SĐT", "SDT"],
     "phone_secondary": ["Số điện thoại 2", "Phone 2", "Điện thoại phụ huynh 2"],
-    "created_at": ["Ngày tạo", "Created date", "Created at"],
+    "created_at": ["Ngày tạo", "Created date", "Created at", "Ngày nhập", "Ngày lead", "Lead date", "Date"],
     "assigned_to": ["Người phụ trách", "Assignee", "Assigned to"],
-    "contact_status": ["Tình trạng gọi điện", "Trạng thái gọi", "Status"],
-    "source": ["Nguồn khách hàng", "Lead source", "Source"],
-    "branch": ["Cơ sở", "Chi nhánh", "Branch"],
-    "notes": ["Ghi chú", "Trao đổi gần nhất", "Notes", "Note"],
+    "contact_status": ["Tình trạng gọi điện", "Trạng thái gọi", "Status", "Kết quả gọi", "Call status"],
+    "source": ["Nguồn khách hàng", "Lead source", "Source", "Kênh", "Campaign source"],
+    "branch": ["Cơ sở", "Chi nhánh", "Branch", "Campus", "Center"],
+    "notes": ["Ghi chú", "Trao đổi gần nhất", "Notes", "Note", "Nội dung trao đổi", "Comment"],
     "last_contact_at": ["Last contact at", "Lần liên hệ gần nhất", "Ngày liên hệ gần nhất"],
     "parent_name": ["Họ và tên phụ huynh", "Tên phụ huynh", "Phụ huynh"],
+}
+
+KEYWORD_HINTS: dict[str, list[str]] = {
+    "external_id": ["ma", "khach", "crm", "customer", "id"],
+    "name": ["ten", "hoc", "sinh", "khach", "name", "student"],
+    "phone": ["dien", "thoai", "phone", "sdt", "so", "lien", "he"],
+    "phone_secondary": ["phone2", "thoai2", "phu", "secondary", "alt"],
+    "created_at": ["ngay", "tao", "created", "date", "lead", "createdat"],
+    "assigned_to": ["phu", "trach", "assignee", "assigned", "owner", "sale"],
+    "contact_status": ["tinh", "trang", "goi", "status", "call", "ket", "qua"],
+    "source": ["nguon", "source", "campaign", "channel", "kenh"],
+    "branch": ["co", "so", "chi", "nhanh", "branch", "campus", "center"],
+    "notes": ["ghi", "chu", "note", "comment", "trao", "doi", "noi", "dung"],
+    "last_contact_at": ["last", "contact", "ngay", "lien", "he", "gan", "nhat"],
+    "parent_name": ["phu", "huynh", "parent"],
 }
 
 
@@ -44,15 +60,45 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", str(s).strip())
 
 
+def _strip_accents(s: str) -> str:
+    return "".join(
+        ch for ch in unicodedata.normalize("NFD", s) if unicodedata.category(ch) != "Mn"
+    )
+
+
+def _norm_key(s: str) -> str:
+    """
+    Header normalization for fuzzy matching across "similar" Excel files:
+    - remove accents
+    - lower case
+    - remove punctuation/special chars
+    - collapse spaces
+    """
+    plain = _strip_accents(str(s or "").strip()).lower()
+    plain = re.sub(r"[^a-z0-9]+", " ", plain)
+    return re.sub(r"\s+", " ", plain).strip()
+
+
+def _contains_all_keywords(header_key: str, keywords: list[str]) -> bool:
+    return all(k in header_key for k in keywords)
+
+
 def _find_column(df: pd.DataFrame, header: str | None) -> str | None:
     if not header:
         return None
     h = _norm(header)
+    hk = _norm_key(header)
     for c in df.columns:
         if _norm(str(c)) == h:
             return c
     for c in df.columns:
+        if _norm_key(str(c)) == hk:
+            return c
+    for c in df.columns:
         if h.lower() in _norm(str(c)).lower():
+            return c
+    for c in df.columns:
+        if hk and hk in _norm_key(str(c)):
             return c
     return None
 
@@ -63,6 +109,38 @@ def _find_column_any(df: pd.DataFrame, *headers: str | None) -> str | None:
         if hit:
             return hit
     return None
+
+
+def _find_column_by_keywords(df: pd.DataFrame, field: str) -> str | None:
+    """
+    Generic fallback when aliases are not enough.
+    Uses normalized keyword signatures to support "similar" templates.
+    """
+    hints = KEYWORD_HINTS.get(field) or []
+    if not hints:
+        return None
+    # Try strong signatures first.
+    strong_sets: dict[str, list[list[str]]] = {
+        "phone": [["phone"], ["sdt"], ["dien", "thoai"]],
+        "assigned_to": [["phu", "trach"], ["assignee"], ["assigned"]],
+        "created_at": [["ngay", "tao"], ["created"], ["date"]],
+        "contact_status": [["tinh", "trang", "goi"], ["call", "status"], ["status"]],
+        "notes": [["ghi", "chu"], ["note"], ["comment"]],
+    }
+    for kws in strong_sets.get(field, []):
+        for c in df.columns:
+            if _contains_all_keywords(_norm_key(str(c)), kws):
+                return c
+    # Then looser "any keyword" scoring.
+    best_col: str | None = None
+    best_score = 0
+    for c in df.columns:
+        ck = _norm_key(str(c))
+        score = sum(1 for h in hints if h in ck)
+        if score > best_score:
+            best_score = score
+            best_col = c
+    return best_col if best_score >= 2 else None
 
 
 def _status_from_contact_cell(raw: Any) -> str:
@@ -205,9 +283,23 @@ def parse_excel_bytes(
         *COLUMN_ALIASES["last_contact_at"],
     )
 
+    # Fallback heuristics for similar Excel templates.
+    col_ext = col_ext or _find_column_by_keywords(df, "external_id")
+    col_name = col_name or _find_column_by_keywords(df, "name")
+    col_phone = col_phone or _find_column_by_keywords(df, "phone")
+    col_phone2 = col_phone2 or _find_column_by_keywords(df, "phone_secondary")
+    col_created = col_created or _find_column_by_keywords(df, "created_at")
+    col_assign = col_assign or _find_column_by_keywords(df, "assigned_to")
+    col_status = col_status or _find_column_by_keywords(df, "contact_status")
+    col_source = col_source or _find_column_by_keywords(df, "source")
+    col_branch = col_branch or _find_column_by_keywords(df, "branch")
+    col_notes = col_notes or _find_column_by_keywords(df, "notes")
+    col_parent_name = col_parent_name or _find_column_by_keywords(df, "parent_name")
+    col_last_contact = col_last_contact or _find_column_by_keywords(df, "last_contact_at")
+
     if not col_created:
         raise ValueError(
-            f"Could not find created date column matching '{mapping.created_at}'. "
+            f"Could not find created date column (expected like '{mapping.created_at}' or similar). "
             f"Columns: {list(df.columns)}"
         )
 

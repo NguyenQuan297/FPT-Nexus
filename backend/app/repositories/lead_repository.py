@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -232,3 +232,57 @@ class LeadRepository:
         if sale_username:
             q = q.where(Lead.assigned_to == sale_username)
         return list((await db.execute(q)).scalars().all())
+
+    async def reassign_leads_from_label_to_username(
+        self,
+        db: AsyncSession,
+        *,
+        old_label: str,
+        new_username: str,
+    ) -> int:
+        old = (old_label or "").strip()
+        new_u = (new_username or "").strip()
+        if not old or not new_u:
+            return 0
+        now = datetime.now(timezone.utc)
+        bind = db.get_bind()
+        dialect = getattr(getattr(bind, "dialect", None), "name", "") or ""
+
+        if dialect == "postgresql":
+            r = await db.execute(
+                text(
+                    """
+                    UPDATE leads SET
+                        assigned_to = :new_u,
+                        updated_at = :now,
+                        extra = jsonb_set(
+                            COALESCE(extra, '{}'::jsonb),
+                            '{assignee_display_label}',
+                            to_jsonb(CAST(:old_label AS TEXT))
+                        )
+                    WHERE assigned_to = :old_label
+                    """
+                ),
+                {"new_u": new_u, "now": now, "old_label": old},
+            )
+            return int(r.rowcount or 0)
+
+        q = select(Lead).where(Lead.assigned_to == old)
+        rows = list((await db.execute(q)).scalars().all())
+        for lead in rows:
+            lead.assigned_to = new_u
+            lead.updated_at = now
+            ex = dict(lead.extra or {})
+            ex["assignee_display_label"] = old
+            lead.extra = ex
+        await db.flush()
+        return len(rows)
+
+    async def list_distinct_assignees(self, db: AsyncSession) -> List[str]:
+        q = (
+            select(func.distinct(Lead.assigned_to))
+            .where(Lead.assigned_to.is_not(None))
+            .order_by(Lead.assigned_to.asc())
+        )
+        vals = [x for x in (await db.execute(q)).scalars().all() if x and str(x).strip()]
+        return [str(v).strip() for v in vals]

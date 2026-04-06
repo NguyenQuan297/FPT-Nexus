@@ -13,7 +13,11 @@ from app.api.v1 import router as v1_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.base import Base
-from app.db.schema_patch import apply_postgres_lead_patches
+from app.db.schema_patch import (
+    apply_postgres_lead_patches,
+    apply_postgres_notification_pref_table,
+    apply_postgres_user_display_name,
+)
 from app.db.session import AsyncSessionLocal, engine
 from app.realtime.ws_manager import redis_event_fanout_loop
 from app.workers.daily_miss_worker import schedule_daily_miss_job
@@ -62,6 +66,8 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await apply_postgres_lead_patches(conn)
+        await apply_postgres_user_display_name(conn)
+        await apply_postgres_notification_pref_table(conn)
 
     await _seed_admin_if_needed()
 

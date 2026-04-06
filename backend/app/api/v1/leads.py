@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db, require_admin
 from app.models.user import User
 from app.schemas.lead import (
+    BulkActionBody,
+    BulkActionOut,
     BulkAssignBody,
     DashboardStats,
     LeadAssignBody,
@@ -23,6 +25,7 @@ from app.schemas.lead import (
 )
 from app.services import cache_service
 from app.services import lead_service
+from app.services.lead_display_utils import lead_to_lead_out, leads_to_lead_outs
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -59,11 +62,45 @@ async def bulk_assign(
     return {"assigned": n}
 
 
+@router.post("/bulk-actions", response_model=BulkActionOut)
+async def bulk_actions(
+    body: BulkActionBody,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await lead_service.bulk_apply_action(db, actor=user, body=body)
+    await db.commit()
+    await cache_service.cache_delete("dash:")
+    return result
+
+
+@router.post("/bulk-export")
+async def bulk_export_csv(
+    body: BulkActionBody,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    rows = await lead_service.bulk_export_csv_rows(db, actor=user, body=body)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    for r in rows:
+        w.writerow(r)
+    data = buf.getvalue()
+    return StreamingResponse(
+        iter([data]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="selected_leads_export.csv"',
+        },
+    )
+
+
 @router.get("/query", response_model=LeadQueryResponse)
 async def query_leads(
     assigned_to: Optional[str] = None,
     phone: Optional[str] = None,
     overdue_only: bool = False,
+    uncontacted_only: bool = False,
     statuses: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
@@ -79,12 +116,49 @@ async def query_leads(
         assigned_to=assigned_to,
         phone_search=phone,
         overdue_only=overdue_only,
+        uncontacted_only=uncontacted_only,
         statuses=status_list,
         date_from=date_from,
         date_to=date_to,
         page=page,
         limit=limit,
     )
+
+
+@router.get("/query-ids")
+async def query_lead_ids(
+    assigned_to: Optional[str] = None,
+    phone: Optional[str] = None,
+    overdue_only: bool = False,
+    uncontacted_only: bool = False,
+    statuses: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    status_list = [s.strip() for s in statuses.split(",")] if statuses else None
+    ids = await lead_service.query_lead_ids(
+        db,
+        current_user=user,
+        assigned_to=assigned_to,
+        phone_search=phone,
+        overdue_only=overdue_only,
+        uncontacted_only=uncontacted_only,
+        statuses=status_list,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    return {"ids": [str(x) for x in ids], "total": len(ids)}
+
+
+@router.get("/assignees")
+async def list_assignees(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    values = await lead_service.list_available_assignees(db, actor=user)
+    return {"items": values}
 
 
 @router.get("", response_model=List[LeadOut])
@@ -98,7 +172,7 @@ async def list_leads(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    return await lead_service.list_leads(
+    rows = await lead_service.list_leads(
         db,
         current_user=user,
         assigned_to=assigned_to,
@@ -108,6 +182,7 @@ async def list_leads(
         limit=limit,
         offset=offset,
     )
+    return await leads_to_lead_outs(db, rows)
 
 
 @router.get("/stats", response_model=DashboardStats)
@@ -143,7 +218,8 @@ async def assign_lead(
     lead = await lead_service.assign_lead(db, lead_id, body.username, user)
     await db.commit()
     await cache_service.cache_delete("dash:")
-    return lead
+    await db.refresh(lead)
+    return await lead_to_lead_out(db, lead)
 
 
 @router.patch("/{lead_id}", response_model=LeadOut)
@@ -156,7 +232,8 @@ async def patch_lead(
     lead = await lead_service.update_lead_fields(db, lead_id, body, user)
     await db.commit()
     await cache_service.cache_delete("dash:")
-    return lead
+    await db.refresh(lead)
+    return await lead_to_lead_out(db, lead)
 
 
 @router.get("/{lead_id}", response_model=LeadOut)
@@ -168,4 +245,4 @@ async def get_lead(
     row = await lead_service.get_lead(db, lead_id, user)
     if not row:
         raise HTTPException(status_code=404, detail="Lead not found")
-    return row
+    return await lead_to_lead_out(db, row)

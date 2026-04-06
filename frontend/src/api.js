@@ -15,7 +15,9 @@ export async function apiFetch(path, opts = {}) {
   const { timeoutMs: timeoutOpt, ...fetchOpts } = opts;
   const headers = { ...fetchOpts.headers };
   const t = getToken();
-  if (t) headers["Authorization"] = `Bearer ${t}`;
+  // Không gửi token cũ khi đăng nhập — tránh xung đột / nhầm lỗi
+  const isLogin = String(path || "").includes("/auth/login");
+  if (t && !isLogin) headers["Authorization"] = `Bearer ${t}`;
   if (fetchOpts.body && !(fetchOpts.body instanceof FormData) && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
@@ -42,7 +44,22 @@ export async function apiFetch(path, opts = {}) {
   }
   if (r.status === 401) {
     if (!path.includes("/auth/login")) setToken(null);
-    throw new Error("Unauthorized");
+    let msg = "Unauthorized";
+    try {
+      const ct = r.headers.get("content-type");
+      if (ct && ct.includes("application/json")) {
+        const j = await r.json();
+        if (j.detail != null) {
+          msg = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+        }
+      } else {
+        const txt = await r.text();
+        if (txt) msg = txt;
+      }
+    } catch {
+      // giữ msg mặc định
+    }
+    throw new Error(msg);
   }
   if (!r.ok) {
     const txt = await r.text();

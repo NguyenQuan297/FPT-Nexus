@@ -37,3 +37,46 @@ async def apply_postgres_lead_patches(conn: AsyncConnection) -> None:
     if n_ok:
         log.info("PostgreSQL leads table: applied %s/%s column patches", n_ok, len(_PG_LEAD_ALTS))
 
+
+_PG_CREATE_NOTIFICATION_PREFS = """
+CREATE TABLE IF NOT EXISTS user_notification_prefs (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    telegram_chat_id VARCHAR(64),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+"""
+
+_PG_NOTIFICATION_PREFS_ALTS = [
+    "ALTER TABLE user_notification_prefs DROP COLUMN IF EXISTS zalo_webhook_url",
+]
+
+
+_PG_USER_ALTS = [
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(512)",
+]
+
+
+async def apply_postgres_user_display_name(conn: AsyncConnection) -> None:
+    if conn.engine.dialect.name != "postgresql":
+        return
+    for sql in _PG_USER_ALTS:
+        try:
+            await conn.execute(text(sql))
+        except Exception as e:
+            log.error("users table patch failed: %s | %s", sql, e)
+
+
+async def apply_postgres_notification_pref_table(conn: AsyncConnection) -> None:
+    if conn.engine.dialect.name != "postgresql":
+        return
+    try:
+        await conn.execute(text(_PG_CREATE_NOTIFICATION_PREFS))
+        log.info("PostgreSQL user_notification_prefs table ensured")
+    except Exception as e:
+        log.error("notification prefs table patch failed: %s", e)
+    for sql in _PG_NOTIFICATION_PREFS_ALTS:
+        try:
+            await conn.execute(text(sql))
+        except Exception as e:
+            log.error("notification prefs patch failed: %s | %s", sql, e)
+

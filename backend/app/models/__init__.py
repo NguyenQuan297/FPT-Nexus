@@ -5,6 +5,7 @@ from app.models.lead import Lead
 from app.models.lead_status_audit import LeadStatusAudit
 from app.models.notification import Notification
 from app.models.user import User
+from app.models.user_notification_preference import UserNotificationPreference
 
 __all__ = [
     "DailyMissStat",
@@ -14,4 +15,5 @@ __all__ = [
     "LeadStatusAudit",
     "Notification",
     "User",
+    "UserNotificationPreference",
 ]

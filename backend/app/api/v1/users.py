@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, require_admin
 from app.models.user import User
-from app.schemas.user_admin import UserCreate, UserOut, UserUpdate
+from app.schemas.user_admin import UserCreate, UserOut, UserPerformanceOut, UserUpdate
 from app.services import user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -21,6 +21,14 @@ async def list_users(
 ):
     users = await user_service.list_users(db)
     return users
+
+
+@router.get("/performance", response_model=List[UserPerformanceOut])
+async def list_users_performance(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    return await user_service.list_user_performance(db)
 
 
 @router.post("", response_model=UserOut)
@@ -43,6 +51,8 @@ async def patch_user(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    u = await user_service.update_user(db, user_id, body)
+    u, merged = await user_service.update_user(db, user_id, body)
     await db.commit()
-    return u
+    await db.refresh(u)
+    base = UserOut.model_validate(u)
+    return base.model_copy(update={"leads_reassigned_from_assignee": merged})

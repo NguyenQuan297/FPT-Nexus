@@ -19,6 +19,7 @@ class TokenResponse(BaseModel):
 class UserMe(BaseModel):
     id: UUID
     username: str
+    display_name: Optional[str] = None
     role: str
     is_active: bool
 

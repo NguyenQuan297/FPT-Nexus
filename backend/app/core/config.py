@@ -1,10 +1,19 @@
+from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Luôn đọc backend/.env dù chạy uvicorn từ thư mục gốc repo hay từ backend/
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_ENV_FILE = _BACKEND_DIR / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=str(_ENV_FILE),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/leads"
     sync_database_url: str = "postgresql://postgres:postgres@127.0.0.1:5432/leads"
@@ -22,6 +31,8 @@ class Settings(BaseSettings):
     upload_dir: str = "./uploads"
 
     telegram_bot_token: Optional[str] = None
+    #: Username bot (không có @) — dùng cho nút "Đăng nhập Telegram" trên web; BotFather: /setdomain
+    telegram_bot_username: Optional[str] = None
     telegram_chat_id: Optional[str] = None
     smtp_host: Optional[str] = None
     smtp_port: int = 587
