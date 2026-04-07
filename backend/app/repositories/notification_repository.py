@@ -55,3 +55,15 @@ class NotificationRepository:
         n.read_at = datetime.now(timezone.utc)
         await db.flush()
         return n
+
+    async def mark_all_read_for_user(self, db: AsyncSession, user_id: UUID) -> int:
+        from sqlalchemy import update
+
+        now = datetime.now(timezone.utc)
+        res = await db.execute(
+            update(Notification)
+            .where(Notification.user_id == user_id, Notification.read_at.is_(None))
+            .values(read_at=now)
+        )
+        await db.flush()
+        return int(res.rowcount or 0)

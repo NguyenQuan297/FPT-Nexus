@@ -1,4 +1,11 @@
-import { BarFrequencyChart, ChartCard, Kpi, LineTrendChart, PieStatusChart } from "../dashboard/DashboardCharts";
+import {
+  BarFrequencyChart,
+  ChartCard,
+  Kpi,
+  LineTrendChart,
+  PieStatusChart,
+  ZoomableChart,
+} from "../dashboard/DashboardCharts";
 import { styles } from "../../styles/appStyles";
 
 export default function DashboardTab({
@@ -20,15 +27,15 @@ export default function DashboardTab({
   return (
     <>
       <section style={styles.kpiGrid}>
-        <Kpi title="Total Leads" value={totalLeads} tone="slate" />
-        <Kpi title="Uncontacted" value={uncontacted} tone="amber" />
-        <Kpi title="At risk (12-16h)" value={atRisk} tone="rose" />
+        <Kpi title="Tổng lead" value={totalLeads} tone="slate" />
+        <Kpi title="Chưa liên hệ" value={uncontacted} tone="amber" />
+        <Kpi title="Sắp quá hạn (12-16h)" value={atRisk} tone="rose" />
         <Kpi title="Quá hạn SLA" value={overdueCount} tone="red" />
         <Kpi title="Đã liên hệ hôm nay" value={contactedToday} tone="green" />
-        <Kpi title="SLA Compliance" value={`${slaCompliance.toFixed(1)}%`} tone="blue" />
-        <Kpi title="Conversion (REG)" value={`${Number(conversionRegPct || 0).toFixed(1)}%`} tone="green" />
+        <Kpi title="Tỷ lệ đạt SLA" value={`${slaCompliance.toFixed(1)}%`} tone="blue" />
+        <Kpi title="Tỷ lệ chuyển đổi (REG)" value={`${Number(conversionRegPct || 0).toFixed(1)}%`} tone="green" />
         {user.role === "admin" && visibleStats?.daily_misses_today != null && (
-          <Kpi title="Số lead trễ hôm nay (UTC)" value={visibleStats.daily_misses_today} tone="rose" />
+          <Kpi title="Số lead trễ hôm nay" value={visibleStats.daily_misses_today} tone="rose" />
         )}
       </section>
 
@@ -42,19 +49,50 @@ export default function DashboardTab({
       )}
 
       <section style={styles.card}>
-        <h3>Xu hướng 7 ngày gần nhất</h3>
+        <h3>Xu hướng theo ngày (từ ngày có dữ liệu đến hiện tại)</h3>
+        <p style={{ marginTop: -6, marginBottom: 10, fontSize: 12, color: "#64748b" }}>
+          Bấm vào biểu đồ để phóng to; đưa chuột để xem số liệu từng ngày (cột / đường).
+        </p>
         <div style={styles.dashboardCharts}>
           <ChartCard title="Tần suất lead theo ngày">
-            <BarFrequencyChart data={trend7} progress={chartProgress} />
+            <ZoomableChart chartTitle="Tần suất lead theo ngày">
+              {(z) => (
+                <BarFrequencyChart
+                  data={trend7}
+                  progress={chartProgress}
+                  zoomed={z}
+                  formatTooltipValue={(d) => `Số lead mới: ${d.value}`}
+                />
+              )}
+            </ZoomableChart>
           </ChartCard>
-          <ChartCard title="Contact rate trend (7 ngày)">
-            <LineTrendChart data={contactRate7} progress={chartProgress} />
+          <ChartCard title="Xu hướng tỷ lệ liên hệ theo ngày">
+            <ZoomableChart chartTitle="Xu hướng tỷ lệ liên hệ theo ngày">
+              {(z) => (
+                <LineTrendChart data={contactRate7} progress={chartProgress} zoomed={z} valueSuffix="%" />
+              )}
+            </ZoomableChart>
           </ChartCard>
-          <ChartCard title="Conversion trend REG (7 ngày)">
-            <LineTrendChart data={conversionRate7} progress={chartProgress} />
+          <ChartCard title="Xu hướng chuyển đổi REG theo ngày">
+            <ZoomableChart chartTitle="Xu hướng chuyển đổi REG theo ngày">
+              {(z) => (
+                <LineTrendChart data={conversionRate7} progress={chartProgress} zoomed={z} valueSuffix="%" />
+              )}
+            </ZoomableChart>
           </ChartCard>
           <ChartCard title="Phân bổ tình trạng lead">
-            <PieStatusChart total={totalLeads} contacted={Math.max(0, totalLeads - uncontacted)} overdue={overdueCount} waiting={Math.max(0, uncontacted - overdueCount)} progress={chartProgress} />
+            <ZoomableChart chartTitle="Phân bổ tình trạng lead">
+              {(z) => (
+                <PieStatusChart
+                  total={totalLeads}
+                  contacted={Math.max(0, totalLeads - uncontacted)}
+                  overdue={overdueCount}
+                  waiting={Math.max(0, uncontacted - overdueCount)}
+                  progress={chartProgress}
+                  zoomed={z}
+                />
+              )}
+            </ZoomableChart>
           </ChartCard>
         </div>
       </section>

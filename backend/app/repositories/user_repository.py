@@ -33,6 +33,10 @@ class UserRepository:
         q = select(User).order_by(User.username)
         return list((await db.execute(q)).scalars().all())
 
+    async def list_by_role(self, db: AsyncSession, role: str) -> List[User]:
+        q = select(User).where(User.role == role, User.is_active.is_(True)).order_by(User.username)
+        return list((await db.execute(q)).scalars().all())
+
     async def create(
         self,
         db: AsyncSession,

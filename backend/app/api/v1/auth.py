@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse, UserMe
-from app.services import auth_service
+from app.services import auth_service, presence_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -16,6 +16,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = await auth_service.authenticate(db, body.username, body.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid username or password")
+    await presence_service.touch_online(user.id)
     token = auth_service.issue_token(user)
     return TokenResponse(access_token=token)
 
@@ -23,3 +24,9 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 @router.get("/me", response_model=UserMe)
 async def me(user: User = Depends(get_current_user)):
     return UserMe.model_validate(user)
+
+
+@router.post("/logout")
+async def logout(user: User = Depends(get_current_user)):
+    await presence_service.set_offline(user.id)
+    return {"ok": True}

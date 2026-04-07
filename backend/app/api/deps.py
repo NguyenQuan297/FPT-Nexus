@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import decode_token
 from app.db.session import get_db as get_db_session
 from app.models.user import User
-from app.services import auth_service
+from app.services import auth_service, presence_service
 
 security = HTTPBearer()
 
@@ -32,6 +32,7 @@ async def get_current_user(
     user = await auth_service.get_user_by_id(db, uid)
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User inactive or not found")
+    await presence_service.touch_online(user.id)
     return user
 
 

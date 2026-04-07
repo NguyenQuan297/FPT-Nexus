@@ -57,6 +57,8 @@ class LeadUpdateBody(BaseModel):
     append_note: Optional[str] = Field(default=None, max_length=4000)
     mark_contacted: bool = False
     last_contact_at: Optional[datetime] = None
+    #: Nhãn «Tình trạng gọi điện» (Excel); ghi vào extra; chuỗi rỗng = xóa
+    contact_call_status: Optional[str] = Field(default=None, max_length=400)
 
 
 class BulkAssignBody(BaseModel):
@@ -69,6 +71,8 @@ class LeadFilterBody(BaseModel):
     phone: Optional[str] = None
     overdue_only: bool = False
     statuses: List[str] = Field(default_factory=list)
+    #: Lọc theo nhãn tình trạng gọi điện (extra), khớp sau chuẩn hoá khoảng trắng / hoa thường
+    contact_call_statuses: List[str] = Field(default_factory=list)
     date_from: Optional[datetime] = None
     date_to: Optional[datetime] = None
     uncontacted_only: bool = False

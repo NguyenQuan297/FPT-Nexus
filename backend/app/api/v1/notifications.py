@@ -54,3 +54,13 @@ async def mark_read(
     n = await repo.mark_read(db, notif_id, user.id)
     await db.commit()
     return {"ok": bool(n)}
+
+
+@router.post("/read-all")
+async def mark_all_read(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    n = await repo.mark_all_read_for_user(db, user.id)
+    await db.commit()
+    return {"ok": True, "marked": n}

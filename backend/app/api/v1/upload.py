@@ -143,6 +143,14 @@ async def upload_excel(
         ),
         actor_user_id=user.id,
     )
+    try:
+        await notify_service.notify_sales_excel_upload_in_app_async(
+            admin_username=user.username,
+            filename=file.filename or "upload.xlsx",
+            queued_rows=queued,
+        )
+    except Exception:
+        log.exception("notify_sales_excel_upload_in_app_async failed")
     return {
         "queued": queued,
         "batch_id": str(batch_id),

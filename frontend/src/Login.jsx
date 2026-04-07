@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { apiFetch, setToken } from "./api";
+import BrandLogo from "./components/common/BrandLogo";
 
 export default function Login({ onLoggedIn }) {
   const [username, setUsername] = useState("");
@@ -12,9 +13,11 @@ export default function Login({ onLoggedIn }) {
     setErr(null);
     setLoading(true);
     try {
+      const uname = username.trim();
+      if (!uname) throw new Error("Vui lòng nhập tên đăng nhập.");
       const data = await apiFetch("/api/v1/auth/login", {
         method: "POST",
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: uname, password }),
       });
       setToken(data.access_token);
       const me = await apiFetch("/api/v1/auth/me");
@@ -29,8 +32,9 @@ export default function Login({ onLoggedIn }) {
   return (
     <div style={wrap}>
       <form style={card} onSubmit={submit}>
-        <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>Quản lý Lead</h1>
-        <p style={{ color: "#64748b", margin: "0 0 20px", fontSize: 14 }}>
+        <h1 style={srOnly}>FPT Nexus</h1>
+        <BrandLogo variant="login" />
+        <p style={{ color: "#64748b", margin: "0 0 20px", fontSize: 14, textAlign: "center" }}>
           Đăng nhập vào hệ thống
         </p>
         {err && <div style={errorBox}>{err}</div>}
@@ -77,6 +81,18 @@ export default function Login({ onLoggedIn }) {
     </div>
   );
 }
+
+const srOnly = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0,0,0,0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
 
 const wrap = {
   minHeight: "100vh",

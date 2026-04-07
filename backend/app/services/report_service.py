@@ -6,10 +6,12 @@ from typing import Dict, List
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.lead_repository import LeadRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.reports import ConversionRowOut, MonthlyReportOut, PriorityLeadOut, SaleMonthlySlice
 from app.services.sla_service import is_lead_overdue
 
 lead_repo = LeadRepository()
+user_repo = UserRepository()
 
 
 def _normalize_enrollment_bucket(raw: object) -> str | None:
@@ -57,9 +59,30 @@ async def monthly_report(
         else 100.0
     )
 
+    assigned_usernames = {
+        (L.assigned_to or "").strip()
+        for L in leads
+        if (L.assigned_to or "").strip()
+    }
+    users = await user_repo.get_by_usernames(db, list(assigned_usernames))
+    user_display_map = {
+        u.username: ((u.display_name or "").strip() or u.username)
+        for u in users
+    }
+
+    def assignee_display_name(L) -> str:
+        extra = L.extra if isinstance(L.extra, dict) else {}
+        label = str(extra.get("assignee_display_label") or "").strip()
+        if label:
+            return label
+        raw = (L.assigned_to or "").strip()
+        if not raw:
+            return "Chưa gán"
+        return user_display_map.get(raw, raw)
+
     grouped: Dict[str, List] = {}
     for L in leads:
-        key = (L.assigned_to or "Chua gan").strip() or "Chua gan"
+        key = assignee_display_name(L)
         grouped.setdefault(key, []).append(L)
 
     by_sale: List[SaleMonthlySlice] = []
@@ -121,7 +144,7 @@ async def monthly_report(
             id=L.id,
             name=L.name or "(Khong ten)",
             phone=L.phone,
-            assignee=L.assigned_to,
+            assignee=assignee_display_name(L),
             status=L.status,
             created_at=L.created_at.isoformat(),
             last_contact_at=L.last_contact_at.isoformat() if L.last_contact_at else None,

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Font, PatternFill
 from sqlalchemy import select
 
 from app.core.config import settings
@@ -16,6 +17,7 @@ from app.db.session import AsyncSessionLocal
 from app.models.import_batch import ImportBatch
 from app.models.lead import Lead
 from app.realtime.events import publish_event
+from app.services.lead_display_utils import assignee_display_for_lead, build_username_display_map
 
 log = logging.getLogger(__name__)
 
@@ -108,6 +110,190 @@ def _phone_digits(value: Any) -> str:
     return digits
 
 
+_EXCEL_MAX_CELL_STR = 32000
+
+# Mẫu ảnh 1 — thứ tự cột cố định khi xuất snapshot (chưa có file .xlsx mẫu)
+CANONICAL_EXCEL_HEADERS: list[str] = [
+    "Mã KH",
+    "Tên khách hàng",
+    "Số điện thoại",
+    "Địa chỉ",
+    "Nguồn khách hàng",
+    "Người phụ trách",
+    "Tình trạng cuộc gọi",
+    "Tình trạng khách hàng",
+    "Phân loại",
+    "Ghi chú",
+    "Trao đổi gần nhất",
+    "Nhân viên phụ trách",
+    "Mã số thuế",
+    "Ngày tạo",
+    "Ngày cập nhật",
+    "Nhóm khách hàng",
+    "Mô tả",
+]
+
+
+def _extra_field(ex: Dict[str, Any], *keys: str) -> str:
+    for k in keys:
+        v = ex.get(k)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    return ""
+
+
+def _dt_vn_full(dt: datetime | None) -> str:
+    if dt is None:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).strftime("%d/%m/%Y %H:%M:%S")
+
+
+def _count_exchange_blocks(notes: str) -> int:
+    if not (notes or "").strip():
+        return 0
+    txt = format_exchange_notes_for_excel_export(notes)
+    return len([ln for ln in txt.split("\n") if ln.strip()])
+
+
+def _one_line_to_img1(line: str) -> str:
+    """
+    Mẫu ảnh 1 (một dòng / lần trao đổi):
+    «Tên hiển thị HH:mm DD/MM/YYYY: nội dung»
+    """
+    line = line.strip()
+    if not line:
+        return ""
+    if re.match(r"^.+\s+\d{2}:\d{2}\s+\d{2}/\d{2}/\d{4}\s*:", line):
+        return line
+
+    m = re.match(r"^(.*)\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}):\s*(.*)$", line)
+    if m:
+        body = m.group(4).strip().replace("\n", " ")
+        suf = f": {body}" if body else ":"
+        return f"{m.group(1).strip()} {m.group(3)} {m.group(2)}{suf}"
+
+    m = re.match(r"^(.*)\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2})$", line)
+    if m:
+        return f"{m.group(1).strip()} {m.group(3)} {m.group(2)}:"
+
+    m = re.match(r"^\[(\d{2}/\d{2}/\d{4} \d{2}:\d{2})\]\s+([^:]+):\s*(.*)$", line)
+    if m:
+        dt_part = m.group(1).split()
+        if len(dt_part) >= 2:
+            d0, t0 = dt_part[0], dt_part[1][:5]
+            note = m.group(3).strip().replace("\n", " ")
+            suf = f": {note}" if note else ":"
+            return f"{m.group(2).strip()} {t0} {d0}{suf}"
+    return line
+
+
+def _normalize_exchange_block_to_img1(block: str) -> str:
+    """Một lần trao đổi → đúng một dòng mẫu ảnh 1."""
+    block = block.strip()
+    if not block:
+        return ""
+    lines = [ln.strip() for ln in block.split("\n") if ln.strip()]
+    if len(lines) == 1:
+        return _one_line_to_img1(lines[0])
+
+    first, rest_lines = lines[0], lines[1:]
+    rest = " ".join(rest_lines).replace("\n", " ")
+
+    # Ảnh 2: [DD/MM/YYYY HH:mm:ss] rồi dòng «Tên: ghi chú»
+    if first.startswith("["):
+        m = re.match(r"^\[(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}:\d{2})\]\s*$", first)
+        m2 = re.match(r"^([^:]+):\s*(.*)$", rest)
+        if m and m2:
+            tshort = m.group(2)[:5]
+            note = m2.group(2).strip()
+            suf = f": {note}" if note else ":"
+            return f"{m2.group(1).strip()} {tshort} {m.group(1)}{suf}"
+
+    m = re.match(r"^(.*)\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2})$", first)
+    if m:
+        suf = f": {rest}" if rest else ":"
+        return f"{m.group(1).strip()} {m.group(3)} {m.group(2)}{suf}"
+
+    merged = f"{first} {rest}".strip()
+    return _one_line_to_img1(merged)
+
+
+def format_exchange_notes_for_excel_export(notes: str) -> str:
+    """Nhiều lần trao đổi: mỗi lần một dòng «Tên HH:mm DD/MM/YYYY: …», xuống dòng trong cùng ô."""
+    if not (notes or "").strip():
+        return ""
+    raw = notes.strip()
+    blocks = re.split(r"\n\s*\n+", raw)
+    out: list[str] = []
+    for b in blocks:
+        b = b.strip()
+        if not b:
+            continue
+        out.append(_normalize_exchange_block_to_img1(b))
+    return "\n".join(out)[:_EXCEL_MAX_CELL_STR]
+
+
+def _load_workbook_template(path: Path):
+    """Load workbook preserving rich text / styles as much as openpyxl allows."""
+    return load_workbook(str(path), rich_text=True, keep_links=True, data_only=False)
+
+
+def _merge_wrap_alignment(cell) -> None:
+    """Keep cell fill/font; ensure text wraps for multi-line CRM content."""
+    a = cell.alignment
+    if a and (getattr(a, "wrap_text", None) or getattr(a, "wrapText", None)):
+        return
+    h = getattr(a, "horizontal", None) if a else None
+    v = getattr(a, "vertical", None) if a else "top"
+    cell.alignment = Alignment(
+        wrap_text=True,
+        horizontal=h if h is not None else "general",
+        vertical=v if v is not None else "top",
+        text_rotation=getattr(a, "text_rotation", 0) if a else 0,
+        shrink_to_fit=getattr(a, "shrink_to_fit", None),
+        indent=getattr(a, "indent", 0) if a else 0,
+    )
+
+
+def _bump_row_height_for_text(ws, row: int, text: str) -> None:
+    t = str(text or "")
+    lines = t.count("\n") + 1
+    if len(t) > 120:
+        lines = max(lines, min(80, int(len(t) / 70) + 2))
+    target = min(409.0, max(15.0, 14.0 * lines * 1.1))
+    rd = ws.row_dimensions[row]
+    cur = rd.height
+    if cur is None or cur < target:
+        rd.height = target
+
+
+def _exchange_text_for_excel(lead: Lead) -> str:
+    """Cột «Trao đổi gần nhất»: chuẩn hóa đúng mẫu (tên + ngày giờ dòng đầu, nội dung phía dưới)."""
+    n = (lead.notes or "").strip()
+    if n:
+        return format_exchange_notes_for_excel_export(n)
+    ex = lead.extra or {}
+    v = ex.get("Trao đổi gần nhất")
+    if v is not None and str(v).strip():
+        return format_exchange_notes_for_excel_export(str(v))
+    if lead.last_contact_at:
+        return lead.last_contact_at.astimezone(timezone.utc).strftime("%d/%m/%Y %H:%M")
+    return ""
+
+
+def _notes_for_excel(lead: Lead) -> str:
+    n = (lead.notes or "").strip()
+    return n[:_EXCEL_MAX_CELL_STR] if n else ""
+
+
+def _last_contact_display(lead: Lead) -> str:
+    if not lead.last_contact_at:
+        return ""
+    return lead.last_contact_at.astimezone(timezone.utc).strftime("%d/%m/%Y %H:%M")
+
+
 def _status_for_excel(lead: Lead) -> str:
     if lead.status == "closed":
         return "Đóng"
@@ -118,6 +304,41 @@ def _status_for_excel(lead: Lead) -> str:
     if lead.status == "late":
         return "Trễ hạn"
     return "Chưa liên hệ"
+
+
+def _status_cell_for_excel(lead: Lead) -> str:
+    """Ưu tiên cột «Tình trạng cuộc gọi» / «Tình trạng gọi điện» trong extra (đúng tên file mẫu)."""
+    ex = lead.extra or {}
+    for k in ("Tình trạng cuộc gọi", "Tình trạng gọi điện"):
+        v = ex.get(k)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    return _status_for_excel(lead)
+
+
+def _lead_row_canonical_values(lead: Lead, display_map: Dict[str, str]) -> list[str]:
+    ex = lead.extra if isinstance(lead.extra, dict) else {}
+    traodoi = format_exchange_notes_for_excel_export(lead.notes or "")
+    assignee = assignee_display_for_lead(lead, display_map)
+    return [
+        (lead.external_id or "").strip(),
+        (lead.name or "").strip(),
+        (lead.phone or "").strip(),
+        _extra_field(ex, "Địa chỉ", "Địa chỉ liên hệ"),
+        (lead.source or "").strip(),
+        assignee,
+        _status_cell_for_excel(lead),
+        _extra_field(ex, "Tình trạng khách hàng"),
+        _extra_field(ex, "Phân loại"),
+        _extra_field(ex, "Ghi chú"),
+        traodoi,
+        _extra_field(ex, "Nhân viên phụ trách", "Nhân viên cập nhật") or assignee,
+        _extra_field(ex, "Mã số thuế", "Mã số thuế/CMND"),
+        _dt_vn_full(lead.created_at),
+        _dt_vn_full(lead.updated_at),
+        _extra_field(ex, "Nhóm khách hàng"),
+        _extra_field(ex, "Mô tả"),
+    ]
 
 
 def _resolve_template_path(uri: str | None) -> Path | None:
@@ -153,17 +374,25 @@ def _find_header_row(ws) -> tuple[int, Dict[str, int]] | tuple[None, None]:
             key in header_map
             for key in (
                 _norm_text("Mã KH"),
-                _norm_text("Điện thoại phụ huynh"),
+                _norm_text("Mã khách"),
+                _norm_text("Mã khách hàng"),
+                _norm_text("Tên khách hàng"),
+                _norm_text("Ngày tạo"),
+                _norm_text("Địa chỉ"),
                 _norm_text("Số điện thoại"),
+                _norm_text("Tình trạng cuộc gọi"),
                 _norm_text("Tình trạng gọi điện"),
-                _norm_text("Last contact at"),
+                _norm_text("Trao đổi gần nhất"),
+                _norm_text("Ghi chú"),
             )
         ):
             return r, header_map
     return None, None
 
 
-def _apply_updates_to_template(wb, rows: list[Lead]) -> tuple[int, int]:
+def _apply_updates_to_template(
+    wb, rows: list[Lead], display_map: Dict[str, str]
+) -> tuple[int, int]:
     by_external: Dict[str, Lead] = {}
     by_phone: Dict[str, Lead] = {}
     for lead in rows:
@@ -181,9 +410,66 @@ def _apply_updates_to_template(wb, rows: list[Lead]) -> tuple[int, int]:
         if not header_row or not header_map:
             continue
 
-        col_external = _pick_col(header_map, ["Mã KH", "Mã khách hàng", "Mã khách hàng CRM", "external_id"])
-        col_phone = _pick_col(header_map, ["Điện thoại phụ huynh", "Số điện thoại", "Điện thoại", "Phone"])
-        col_status = _pick_col(header_map, ["Tình trạng gọi điện", "Trạng thái gọi", "Status"])
+        col_external = _pick_col(
+            header_map,
+            ["Mã KH", "Mã khách", "Mã khách hàng", "Mã khách hàng CRM", "Mã đơn", "external_id"],
+        )
+        col_phone = _pick_col(
+            header_map,
+            [
+                "Số điện thoại khách",
+                "Số điện thoại",
+                "Điện thoại phụ huynh",
+                "Điện thoại",
+                "Phone",
+            ],
+        )
+        col_name = _pick_col(
+            header_map,
+            ["Tên khách hàng", "Họ tên khách", "Họ và tên", "Họ tên", "Tên Học Sinh", "Tên KH", "Name"],
+        )
+        col_dia_chi = _pick_col(header_map, ["Địa chỉ", "Địa chỉ liên hệ"])
+        col_source = _pick_col(header_map, ["Nguồn khách hàng", "Nguồn KH", "Source", "Kênh"])
+        col_assignee = _pick_col(header_map, ["Người phụ trách", "Assignee", "Assigned to"])
+        col_status = _pick_col(
+            header_map,
+            ["Tình trạng cuộc gọi", "Tình trạng gọi điện", "Trạng thái gọi", "Status"],
+        )
+        col_tinh_trang_kh = _pick_col(header_map, ["Tình trạng khách hàng"])
+        col_phan_loai = _pick_col(header_map, ["Phân loại"])
+        col_nv_pt = _pick_col(header_map, ["Nhân viên phụ trách", "Nhân viên cập nhật"])
+        col_nhom_kh = _pick_col(header_map, ["Nhóm khách hàng"])
+        col_ngay_cap_nhat = _pick_col(
+            header_map,
+            ["Ngày cập nhật", "Thời gian cập nhật gần nhất"],
+        )
+        col_first_call = _pick_col(header_map, ["Lần đầu gọi điện", "Lần đầu gọi"])
+        col_last_call = _pick_col(
+            header_map,
+            [
+                "Lần cuối gọi điện",
+                "Lần cuối gọi",
+                "Lần gọi cuối",
+                "Last contact at",
+                "Lần liên hệ gần nhất",
+                "Ngày liên hệ gần nhất",
+                "Ngày giờ liên hệ",
+            ],
+        )
+        col_so_lan_goi = _pick_col(header_map, ["Số lần gọi"])
+        col_mo_ta = _pick_col(header_map, ["Mô tả", "Mô tả nhu cầu"])
+        col_ma_thue = _pick_col(header_map, ["Mã số thuế/CMND", "Mã số thuế", "CMND", "Số CMND"])
+        col_ngay_tao = _pick_col(header_map, ["Ngày tạo", "Created date", "Created at"])
+        col_nguoi_tao = _pick_col(header_map, ["Người tạo"])
+        col_khu_vuc = _pick_col(header_map, ["Khu vực", "Cơ sở"])
+        col_chi_nhanh = _pick_col(header_map, ["Chi nhánh", "Branch", "Campus"])
+        col_khoang_cach = _pick_col(header_map, ["Khoảng cách (km)", "Khoảng cách"])
+        col_vi_tri = _pick_col(header_map, ["Vị trí khách hàng", "Vị trí"])
+        col_exchange = _pick_col(
+            header_map,
+            ["Trao đổi gần nhất", "Nội dung trao đổi", "Trao đổi"],
+        )
+        col_notes = _pick_col(header_map, ["Ghi chú", "Notes", "Note", "Comment"])
         if not (col_external or col_phone):
             continue
 
@@ -201,52 +487,218 @@ def _apply_updates_to_template(wb, rows: list[Lead]) -> tuple[int, int]:
                 continue
 
             matched_rows += 1
+            ex = lead.extra if isinstance(lead.extra, dict) else {}
+
+            if col_name:
+                nv = (lead.name or "").strip()
+                cell = ws.cell(row=r, column=col_name)
+                if str(cell.value or "").strip() != nv:
+                    cell.value = nv or None
+                    updated_cells += 1
+
+            if col_dia_chi:
+                dv = _extra_field(ex, "Địa chỉ", "Địa chỉ liên hệ")
+                cell = ws.cell(row=r, column=col_dia_chi)
+                if str(cell.value or "").strip() != dv:
+                    cell.value = dv or None
+                    updated_cells += 1
+
+            if col_source:
+                sv = (lead.source or "").strip()
+                cell = ws.cell(row=r, column=col_source)
+                if str(cell.value or "").strip() != sv:
+                    cell.value = sv or None
+                    updated_cells += 1
+
+            if col_assignee:
+                av = assignee_display_for_lead(lead, display_map)
+                cell = ws.cell(row=r, column=col_assignee)
+                if str(cell.value or "").strip() != av.strip():
+                    cell.value = av or None
+                    updated_cells += 1
+                if av:
+                    _merge_wrap_alignment(cell)
 
             if col_status:
-                status_value = _status_for_excel(lead)
+                status_value = _status_cell_for_excel(lead)
                 cell = ws.cell(row=r, column=col_status)
                 if str(cell.value or "").strip() != status_value:
                     cell.value = status_value
                     updated_cells += 1
 
+            if col_tinh_trang_kh:
+                v = _extra_field(ex, "Tình trạng khách hàng")
+                cell = ws.cell(row=r, column=col_tinh_trang_kh)
+                if str(cell.value or "").strip() != v:
+                    cell.value = v or None
+                    updated_cells += 1
+
+            if col_phan_loai:
+                v = _extra_field(ex, "Phân loại")
+                cell = ws.cell(row=r, column=col_phan_loai)
+                if str(cell.value or "").strip() != v:
+                    cell.value = v or None
+                    updated_cells += 1
+
+            if col_nv_pt:
+                nv = _extra_field(ex, "Nhân viên phụ trách", "Nhân viên cập nhật") or assignee_display_for_lead(
+                    lead, display_map
+                )
+                cell = ws.cell(row=r, column=col_nv_pt)
+                if str(cell.value or "").strip() != nv.strip():
+                    cell.value = nv or None
+                    updated_cells += 1
+
+            if col_nhom_kh:
+                v = _extra_field(ex, "Nhóm khách hàng")
+                cell = ws.cell(row=r, column=col_nhom_kh)
+                if str(cell.value or "").strip() != v:
+                    cell.value = v or None
+                    updated_cells += 1
+
+            if col_first_call:
+                fv = _dt_vn_full(lead.contacted_at)
+                cell = ws.cell(row=r, column=col_first_call)
+                if str(cell.value or "").strip() != fv:
+                    cell.value = fv or None
+                    updated_cells += 1
+
+            if col_last_call:
+                lv = _dt_vn_full(lead.last_contact_at)
+                cell = ws.cell(row=r, column=col_last_call)
+                if str(cell.value or "").strip() != lv:
+                    cell.value = lv or None
+                    updated_cells += 1
+
+            if col_so_lan_goi:
+                n = _count_exchange_blocks(lead.notes or "")
+                sv = str(n) if n else ""
+                cell = ws.cell(row=r, column=col_so_lan_goi)
+                if str(cell.value or "").strip() != sv:
+                    cell.value = sv or None
+                    updated_cells += 1
+
+            if col_mo_ta:
+                mv = _extra_field(ex, "Mô tả", "Mô tả nhu cầu")
+                cell = ws.cell(row=r, column=col_mo_ta)
+                if str(cell.value or "").strip() != mv:
+                    cell.value = mv or None
+                    updated_cells += 1
+
+            if col_ma_thue:
+                tv = _extra_field(ex, "Mã số thuế/CMND", "Mã số thuế", "CMND")
+                cell = ws.cell(row=r, column=col_ma_thue)
+                if str(cell.value or "").strip() != tv:
+                    cell.value = tv or None
+                    updated_cells += 1
+
+            if col_ngay_tao:
+                cv = _dt_vn_full(lead.created_at)
+                cell = ws.cell(row=r, column=col_ngay_tao)
+                if str(cell.value or "").strip() != cv:
+                    cell.value = cv or None
+                    updated_cells += 1
+
+            if col_ngay_cap_nhat:
+                uv = _dt_vn_full(lead.updated_at)
+                cell = ws.cell(row=r, column=col_ngay_cap_nhat)
+                if str(cell.value or "").strip() != uv:
+                    cell.value = uv or None
+                    updated_cells += 1
+
+            if col_nguoi_tao:
+                uv = _extra_field(ex, "Người tạo")
+                cell = ws.cell(row=r, column=col_nguoi_tao)
+                if str(cell.value or "").strip() != uv:
+                    cell.value = uv or None
+                    updated_cells += 1
+
+            if col_khu_vuc:
+                kv = _extra_field(ex, "Khu vực") or (lead.branch or "").strip()
+                cell = ws.cell(row=r, column=col_khu_vuc)
+                if str(cell.value or "").strip() != kv:
+                    cell.value = kv or None
+                    updated_cells += 1
+
+            if col_chi_nhanh:
+                bv = (lead.branch or "").strip()
+                cell = ws.cell(row=r, column=col_chi_nhanh)
+                if str(cell.value or "").strip() != bv:
+                    cell.value = bv or None
+                    updated_cells += 1
+
+            if col_khoang_cach:
+                gv = _extra_field(ex, "Khoảng cách (km)", "Khoảng cách")
+                cell = ws.cell(row=r, column=col_khoang_cach)
+                if str(cell.value or "").strip() != gv:
+                    cell.value = gv or None
+                    updated_cells += 1
+
+            if col_vi_tri:
+                vv = _extra_field(ex, "Vị trí khách hàng", "Vị trí")
+                cell = ws.cell(row=r, column=col_vi_tri)
+                if str(cell.value or "").strip() != vv:
+                    cell.value = vv or None
+                    updated_cells += 1
+
+            exchange_value = _exchange_text_for_excel(lead) if col_exchange else ""
+
+            if col_exchange:
+                cell = ws.cell(row=r, column=col_exchange)
+                if str(cell.value or "").strip() != (exchange_value or "").strip():
+                    cell.value = exchange_value or None
+                    updated_cells += 1
+                if exchange_value:
+                    _merge_wrap_alignment(cell)
+                    _bump_row_height_for_text(ws, r, exchange_value)
+
+            if col_notes:
+                if col_exchange is not None and col_notes != col_exchange:
+                    ghi = _extra_field(ex, "Ghi chú")
+                    cell = ws.cell(row=r, column=col_notes)
+                    if str(cell.value or "").strip() != ghi:
+                        cell.value = ghi or None
+                        updated_cells += 1
+                    if ghi:
+                        _merge_wrap_alignment(cell)
+                else:
+                    notes_value = _notes_for_excel(lead)
+                    cell = ws.cell(row=r, column=col_notes)
+                    if str(cell.value or "").strip() != (notes_value or "").strip():
+                        cell.value = notes_value or None
+                        updated_cells += 1
+                    if notes_value:
+                        _merge_wrap_alignment(cell)
+                        _bump_row_height_for_text(ws, r, notes_value)
+
     return updated_cells, matched_rows
 
 
-def _build_snapshot_workbook(rows: list[Lead]):
+def _build_snapshot_workbook(rows: list[Lead], display_map: Dict[str, str]):
+    """
+    Fallback khi chưa có file mẫu: sheet 17 cột đúng mẫu ảnh 1 (header vàng).
+    """
     wb = Workbook()
     ws = wb.active
-    ws.title = "Leads"
-    ws.append(
-        [
-            "id",
-            "created_at",
-            "name",
-            "phone",
-            "phone_normalized",
-            "status",
-            "assigned_to",
-            "last_contact_at",
-            "notes",
-            "source",
-            "branch",
-        ]
-    )
+    ws.title = "danhsachkhachhang"
+    hdr = CANONICAL_EXCEL_HEADERS
+    ws.append(hdr)
+    _hdr_fill = PatternFill(start_color="FFFAF200", end_color="FFFAF200", fill_type="solid")
+    _hdr_font = Font(bold=True)
+    for c in range(1, len(hdr) + 1):
+        cell = ws.cell(row=1, column=c)
+        cell.fill = _hdr_fill
+        cell.font = _hdr_font
     for L in rows:
-        ws.append(
-            [
-                str(L.id),
-                L.created_at.isoformat() if L.created_at else "",
-                L.name or "",
-                L.phone or "",
-                L.phone_normalized or "",
-                L.status or "",
-                L.assigned_to or "",
-                L.last_contact_at.isoformat() if L.last_contact_at else "",
-                (L.notes or "")[:5000],
-                L.source or "",
-                L.branch or "",
-            ]
-        )
+        vals = _lead_row_canonical_values(L, display_map)
+        ws.append(vals)
+        rr = ws.max_row
+        for ci in range(1, len(hdr) + 1):
+            if hdr[ci - 1] == "Trao đổi gần nhất":
+                tc = ws.cell(row=rr, column=ci)
+                if tc.value:
+                    _merge_wrap_alignment(tc)
+                    _bump_row_height_for_text(ws, rr, str(tc.value))
     return wb
 
 
@@ -272,22 +724,26 @@ async def generate_latest_excel(*, force: bool = False, min_interval_seconds: in
                 .scalars()
                 .first()
             )
+            usernames = {(L.assigned_to or "").strip() for L in rows if (L.assigned_to or "").strip()}
+            display_map = await build_username_display_map(db, usernames)
 
         source_template = _latest_template_path()
         if source_template is None:
             source_template = _resolve_template_path(latest_batch.storage_uri if latest_batch else None)
+        template_error: str | None = None
         if source_template is not None:
             try:
-                wb = load_workbook(source_template)
-                updated_cells, matched_rows = _apply_updates_to_template(wb, rows)
+                wb = _load_workbook_template(source_template)
+                updated_cells, matched_rows = _apply_updates_to_template(wb, rows, display_map)
                 mode = "template_patch"
             except Exception as e:
-                log.warning("Template patch failed, fallback snapshot mode: %s", e)
-                wb = _build_snapshot_workbook(rows)
+                log.warning("Template patch failed, fallback snapshot mode: %s", e, exc_info=True)
+                template_error = str(e)[:800]
+                wb = _build_snapshot_workbook(rows, display_map)
                 updated_cells, matched_rows = 0, 0
                 mode = "snapshot"
         else:
-            wb = _build_snapshot_workbook(rows)
+            wb = _build_snapshot_workbook(rows, display_map)
             updated_cells, matched_rows = 0, 0
             mode = "snapshot"
 
@@ -304,6 +760,7 @@ async def generate_latest_excel(*, force: bool = False, min_interval_seconds: in
             "template_source": str(source_template) if source_template else None,
             "matched_rows": matched_rows,
             "updated_cells": updated_cells,
+            "template_error": template_error,
         }
         await _write_meta(meta)
         _last_run_ts = now_ts

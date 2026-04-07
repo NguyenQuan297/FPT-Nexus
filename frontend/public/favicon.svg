@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 42">
+  <path d="M2 38 L8 4 L34 4 L28 38 Z" fill="#005DAA"/>
+  <path d="M22 38 L28 4 L54 4 L48 38 Z" fill="#F37021"/>
+  <path d="M42 38 L48 4 L74 4 L68 38 Z" fill="#00A651"/>
+  <text x="18" y="27" text-anchor="middle" fill="#fff" font-family="Arial Black,Arial,sans-serif" font-size="17" font-weight="900" font-style="italic">F</text>
+  <text x="38" y="27" text-anchor="middle" fill="#fff" font-family="Arial Black,Arial,sans-serif" font-size="17" font-weight="900" font-style="italic">P</text>
+  <text x="58" y="27" text-anchor="middle" fill="#fff" font-family="Arial Black,Arial,sans-serif" font-size="17" font-weight="900" font-style="italic">T</text>
+  <text x="102" y="36" text-anchor="end" fill="#005DAA" font-family="Arial,sans-serif" font-size="8" font-weight="700">&#174;</text>
+</svg>

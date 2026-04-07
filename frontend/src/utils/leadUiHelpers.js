@@ -2,6 +2,13 @@ export function renderEventText(evt) {
   const t = evt?.type || "event";
   const p = evt?.payload || {};
   if (t.startsWith("lead.")) return `Cập nhật lead: ${p.name || p.lead_id || "-"}`;
+  if (t === "notification.created") {
+    const title = (p.title || "").trim();
+    const preview = (p.body || "").trim().split("\n")[0];
+    if (title && preview) return `${title}: ${preview.slice(0, 120)}${preview.length > 120 ? "…" : ""}`;
+    if (title) return title;
+    return "Có thông báo mới từ sale";
+  }
   if (t.startsWith("notification.")) return p.title ? `Thông báo: ${p.title}` : "Có thông báo mới";
   if (t === "excel_sync.updated") return `Đã đồng bộ Excel (${p.row_count || 0} dòng)`;
   return t;
@@ -16,6 +23,14 @@ export function statusLabel(status) {
     closed: "Đóng",
   };
   return map[status] || status || "-";
+}
+
+/** Nhãn tình trạng gọi điện (extra), khác trạng thái workflow. */
+export function callStatusFromLead(lead) {
+  const ex = lead?.extra;
+  if (!ex || typeof ex !== "object") return "";
+  const a = ex["Tình trạng gọi điện"] ?? ex["Tình trạng cuộc gọi"];
+  return a != null && String(a).trim() ? String(a).trim() : "";
 }
 
 export function formatDt(iso) {

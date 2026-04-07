@@ -28,6 +28,7 @@ class UserOut(BaseModel):
     display_name: Optional[str] = None
     role: str
     is_active: bool
+    is_online: bool = False
     #: Chỉ có khi PATCH user (số lead đã đổi assigned_to từ nhãn Excel sang username)
     leads_reassigned_from_assignee: Optional[int] = None
 
@@ -40,6 +41,7 @@ class UserPerformanceOut(BaseModel):
     display_name: Optional[str] = None
     role: str
     is_active: bool
+    is_online: bool = False
     leads: int
     sla_pct: float
     reg_pct: float

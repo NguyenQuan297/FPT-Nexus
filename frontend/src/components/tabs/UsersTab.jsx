@@ -130,7 +130,15 @@ export default function UsersTab({
                 <td style={styles.td}>{u.leads ?? "-"}</td>
                 <td style={styles.td}>{u.sla_pct != null ? `${Number(u.sla_pct).toFixed(1)}%` : "-"}</td>
                 <td style={styles.td}>{u.reg_pct != null ? `${Number(u.reg_pct).toFixed(1)}%` : "-"}</td>
-                <td style={styles.td}>{String(u.is_active)}</td>
+                <td style={styles.td}>
+                  {!u.is_active ? (
+                    <span style={{ color: "#9f1239", fontWeight: 700 }}>Đã khóa</span>
+                  ) : u.is_online ? (
+                    <span style={{ color: "#166534", fontWeight: 700 }}>Đang online</span>
+                  ) : (
+                    <span style={{ color: "#64748b" }}>Offline</span>
+                  )}
+                </td>
                 <td style={styles.td}>
                   <button type="button" style={styles.btnSm} onClick={() => openEdit(u)}>
                     Sửa

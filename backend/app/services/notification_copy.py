@@ -90,7 +90,31 @@ def telegram_text_update_lead(
     if body.notes is not None and not note_s:
         lines.append("Đã cập nhật nội dung ghi chú đầy đủ.")
 
+    if body.contact_call_status is not None:
+        ccs = (body.contact_call_status or "").strip()
+        if ccs:
+            lines.append(f"Tình trạng gọi điện → «{ccs}»")
+        else:
+            lines.append("Đã xóa nhãn tình trạng gọi điện trên lead.")
+
     return "\n".join(lines)
+
+
+def sale_lead_update_should_notify(body: LeadUpdateBody) -> bool:
+    """Có thay đổi thực sự cần báo admin (tránh PATCH rỗng)."""
+    if body.append_note and str(body.append_note).strip():
+        return True
+    if body.notes is not None:
+        return True
+    if body.status is not None:
+        return True
+    if body.mark_contacted:
+        return True
+    if body.last_contact_at is not None:
+        return True
+    if body.contact_call_status is not None:
+        return True
+    return False
 
 
 BULK_ACTION_HEADLINE_VI: dict[str, str] = {
@@ -130,6 +154,14 @@ def telegram_text_upload_excel(username: str, filename: str, queued_rows: int) -
     return (
         "🔔 Tải file Excel\n"
         f"{username} vừa tải lên file «{filename}».\n"
+        f"Đã đưa {queued_rows} dòng vào hàng đợi xử lý."
+    )
+
+
+def in_app_text_upload_excel_for_sales(admin_username: str, filename: str, queued_rows: int) -> str:
+    """Thông báo trong app (sale) khi admin tải Excel — khác bản Telegram nhưng cùng nội dung chính."""
+    return (
+        f"Quản trị viên «{admin_username}» vừa tải lên file «{filename}».\n"
         f"Đã đưa {queued_rows} dòng vào hàng đợi xử lý."
     )
 

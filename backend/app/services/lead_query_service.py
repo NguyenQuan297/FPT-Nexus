@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 from app.repositories.lead_repository import LeadRepository
 from app.schemas.lead import DashboardStats, LeadQueryResponse, RateTrendPoint, TrendPoint
-from app.services.lead_display_utils import leads_to_lead_outs
+from app.services.lead_display_utils import (
+    assignee_matches_query,
+    build_username_display_map,
+    leads_to_lead_outs,
+)
+from app.core.call_status import filter_leads_by_contact_call_status_labels
 from app.services.sla_service import sla_deadline
 
 
@@ -43,13 +48,15 @@ async def query_leads_page(
     overdue_only: bool = False,
     uncontacted_only: bool = False,
     statuses: Optional[List[str]] = None,
+    contact_call_statuses: Optional[List[str]] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     page: int = 1,
     limit: int = 20,
 ) -> LeadQueryResponse:
+    assignee_query = (assigned_to or "").strip()
     if current_user.role == "admin":
-        af, sale_exact = assigned_to, None
+        af, sale_exact = None, None
     else:
         af, sale_exact = None, current_user.username
 
@@ -64,9 +71,16 @@ async def query_leads_page(
         offset=0,
     )
 
+    if assignee_query:
+        usernames = {(r.assigned_to or "").strip() for r in rows if (r.assigned_to or "").strip()}
+        display_map = await build_username_display_map(db, usernames)
+        rows = [r for r in rows if assignee_matches_query(r, assignee_query, display_map)]
+
     if statuses:
         status_set = {s.strip() for s in statuses if s and s.strip()}
         rows = [r for r in rows if r.status in status_set]
+
+    rows = filter_leads_by_contact_call_status_labels(rows, contact_call_statuses)
 
     if date_from:
         start_dt = datetime.combine(date_from, datetime.min.time(), tzinfo=timezone.utc)
@@ -142,27 +156,47 @@ async def query_leads_page(
     trend_7d: List[TrendPoint] = []
     contact_rate_7d: List[RateTrendPoint] = []
     conversion_rate_7d: List[RateTrendPoint] = []
-    for i in range(6, -1, -1):
-        d = today - timedelta(days=i)
+
+    def _append_day_point(d: date, day_label: str) -> None:
         day_rows = [r for r in rows if _same_utc_day(r.created_at, d)]
         count = len(day_rows)
         contacted_count = sum(1 for r in day_rows if r.last_contact_at is not None)
         reg_day_count = sum(
-            1 for r in day_rows if _normalize_enrollment_bucket((r.extra or {}).get("Tình trạng nhập học")) == "REG"
+            1
+            for r in day_rows
+            if _normalize_enrollment_bucket((r.extra or {}).get("Tình trạng nhập học")) == "REG"
         )
-        trend_7d.append(TrendPoint(day=f"{d.month}/{d.day}", value=count))
+        trend_7d.append(TrendPoint(day=day_label, value=count))
         contact_rate_7d.append(
             RateTrendPoint(
-                day=f"{d.month}/{d.day}",
+                day=day_label,
                 value=round((contacted_count / count) * 100.0, 2) if count else 0.0,
             )
         )
         conversion_rate_7d.append(
             RateTrendPoint(
-                day=f"{d.month}/{d.day}",
+                day=day_label,
                 value=round((reg_day_count / count) * 100.0, 2) if count else 0.0,
             )
         )
+
+    if current_user.role == "admin":
+        if rows:
+            first_day = min(
+                (r.created_at if r.created_at.tzinfo else r.created_at.replace(tzinfo=timezone.utc)).date()
+                for r in rows
+            )
+        else:
+            first_day = today
+        last_day = today
+        d = first_day
+        while d <= last_day:
+            _append_day_point(d, d.isoformat())
+            d += timedelta(days=1)
+    else:
+        for i in range(6, -1, -1):
+            d = today - timedelta(days=i)
+            _append_day_point(d, f"{d.month}/{d.day}")
 
     return LeadQueryResponse(
         items=items,

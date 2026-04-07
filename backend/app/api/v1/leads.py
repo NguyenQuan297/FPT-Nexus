@@ -102,6 +102,7 @@ async def query_leads(
     overdue_only: bool = False,
     uncontacted_only: bool = False,
     statuses: Optional[str] = None,
+    contact_call_statuses: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     page: int = Query(1, ge=1),
@@ -110,6 +111,9 @@ async def query_leads(
     user: User = Depends(get_current_user),
 ):
     status_list = [s.strip() for s in statuses.split(",")] if statuses else None
+    ccs_list = (
+        [s.strip() for s in contact_call_statuses.split("|") if s.strip()] if contact_call_statuses else None
+    )
     return await lead_service.query_leads_page(
         db,
         current_user=user,
@@ -118,6 +122,7 @@ async def query_leads(
         overdue_only=overdue_only,
         uncontacted_only=uncontacted_only,
         statuses=status_list,
+        contact_call_statuses=ccs_list,
         date_from=date_from,
         date_to=date_to,
         page=page,
@@ -132,12 +137,16 @@ async def query_lead_ids(
     overdue_only: bool = False,
     uncontacted_only: bool = False,
     statuses: Optional[str] = None,
+    contact_call_statuses: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     status_list = [s.strip() for s in statuses.split(",")] if statuses else None
+    ccs_list = (
+        [s.strip() for s in contact_call_statuses.split("|") if s.strip()] if contact_call_statuses else None
+    )
     ids = await lead_service.query_lead_ids(
         db,
         current_user=user,
@@ -146,6 +155,7 @@ async def query_lead_ids(
         overdue_only=overdue_only,
         uncontacted_only=uncontacted_only,
         statuses=status_list,
+        contact_call_statuses=ccs_list,
         date_from=date_from,
         date_to=date_to,
     )

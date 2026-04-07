@@ -1,6 +1,6 @@
-import { LEADS_PAGE_SIZE, STATUS_OPTIONS } from "../../constants/leadConstants";
+import { CALL_STATUS_OPTIONS, LEADS_PAGE_SIZE, STATUS_OPTIONS } from "../../constants/leadConstants";
 import { badge, styles } from "../../styles/appStyles";
-import { formatDt, isClientOverdue, rowStyle, statusLabel } from "../../utils/leadUiHelpers";
+import { callStatusFromLead, formatDt, isClientOverdue, rowStyle, statusLabel } from "../../utils/leadUiHelpers";
 
 export default function LeadsTab(props) {
   const {
@@ -27,6 +27,7 @@ export default function LeadsTab(props) {
     setBulkAction,
     bulkAssignUser,
     setBulkAssignUser,
+    assigneeChoices,
     bulkInterest,
     setBulkInterest,
     bulkFollowUpAt,
@@ -57,7 +58,10 @@ export default function LeadsTab(props) {
     leadsTotal,
     activeLead,
     saveNotes,
+    updateContactCallStatus,
   } = props;
+
+  const detailCallStatus = activeLead ? callStatusFromLead(activeLead) : "";
 
   return (
     <div style={styles.split}>
@@ -80,7 +84,9 @@ export default function LeadsTab(props) {
         )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
           {STATUS_OPTIONS.map((s) => (
-            <label key={s} style={styles.chk}><input type="checkbox" checked={statusMulti.includes(s)} onChange={() => toggleStatus(s)} /> {s}</label>
+            <label key={s} style={styles.chk}>
+              <input type="checkbox" checked={statusMulti.includes(s)} onChange={() => toggleStatus(s)} /> {statusLabel(s)}
+            </label>
           ))}
         </div>
 
@@ -126,8 +132,8 @@ export default function LeadsTab(props) {
               {bulkAction === "assign_to_user" && (
                 <select style={styles.input} value={bulkAssignUser} onChange={(e) => setBulkAssignUser(e.target.value)}>
                   <option value="">Chọn người phụ trách</option>
-                  {assigneeOptions.map((name) => (
-                    <option key={name} value={name}>{name}</option>
+                  {(assigneeChoices || []).map((u) => (
+                    <option key={`${u.target_username}-${u.label}`} value={u.value}>{u.label}</option>
                   ))}
                 </select>
               )}
@@ -170,6 +176,7 @@ export default function LeadsTab(props) {
                 <th style={styles.th}>Mã KH</th>
                 <th style={styles.th}>Tên học sinh</th>
                 <th style={styles.th}>Trạng thái</th>
+                <th style={styles.th}>Tình trạng gọi</th>
                 <th style={styles.th}>Người phụ trách</th>
                 <th style={styles.th}>Lần liên hệ cuối</th>
                 <th style={styles.th}>Hành động</th>
@@ -187,6 +194,9 @@ export default function LeadsTab(props) {
                   <td style={styles.td}>{L.external_id || "-"}</td>
                   <td style={styles.td}>{L.name || "-"}</td>
                   <td style={styles.td}><span style={badge(L.status)}>{statusLabel(L.status)}</span></td>
+                  <td style={{ ...styles.td, fontSize: 12, maxWidth: 200 }} title={callStatusFromLead(L) || ""}>
+                    {callStatusFromLead(L) || "—"}
+                  </td>
                   <td style={styles.td}>{L.assigned_to_display || L.assigned_to || "-"}</td>
                   <td style={styles.td}>{L.last_contact_at ? formatDt(L.last_contact_at) : "-"}</td>
                   <td style={styles.td}>
@@ -196,8 +206,8 @@ export default function LeadsTab(props) {
                         return <span style={{ color: "#64748b", fontSize: 12 }}>Đã liên hệ</span>;
                       }
                       const q = String(assignPick[L.id] || "").trim().toLowerCase();
-                      const filtered = (assigneeOptions || [])
-                        .filter((name) => name.toLowerCase().includes(q))
+                      const filtered = (assigneeChoices || [])
+                        .filter((u) => u.label.toLowerCase().includes(q) || u.target_username.toLowerCase().includes(q))
                         .slice(0, 30);
                       return (
                         <>
@@ -209,7 +219,7 @@ export default function LeadsTab(props) {
                             }}
                             style={{ ...styles.btnSm, textDecoration: "none", display: "inline-block" }}
                           >
-                            Call
+                            Gọi
                           </a>
                           <a
                             href={L.phone ? `https://zalo.me/${String(L.phone).replace(/\D/g, "")}` : "#"}
@@ -235,8 +245,8 @@ export default function LeadsTab(props) {
                                 onClick={(e) => e.stopPropagation()}
                               />
                               <datalist id={`assignee-options-${L.id}`}>
-                                {filtered.map((name) => (
-                                  <option key={`${L.id}-${name}`} value={name} />
+                                {filtered.map((u) => (
+                                  <option key={`${L.id}-${u.target_username}-${u.label}`} value={u.label} />
                                 ))}
                               </datalist>
                               <button style={styles.btnSm} onClick={(e) => { e.stopPropagation(); doAssign(L.id); }}>Gán</button>
@@ -305,6 +315,24 @@ export default function LeadsTab(props) {
             <p>Mã KH: {activeLead.external_id || "-"}</p>
             <p>Số điện thoại: {activeLead.phone || "-"}</p>
             <p>Trạng thái: <span style={badge(activeLead.status)}>{statusLabel(activeLead.status)}</span></p>
+            <p style={{ marginBottom: 8 }}>
+              <label style={{ fontWeight: 600, display: "block", marginBottom: 4 }}>Tình trạng gọi điện</label>
+              <select
+                style={styles.input}
+                value={detailCallStatus || ""}
+                onChange={(e) => updateContactCallStatus(activeLead.id, e.target.value)}
+              >
+                <option value="">— Chưa chọn / xóa —</option>
+                {detailCallStatus && !CALL_STATUS_OPTIONS.includes(detailCallStatus) ? (
+                  <option value={detailCallStatus}>{detailCallStatus} (từ dữ liệu)</option>
+                ) : null}
+                {CALL_STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </p>
             <p>Người phụ trách: {activeLead.assigned_to_display || activeLead.assigned_to || "-"}</p>
             <p>Ngày tạo: {formatDt(activeLead.created_at)}</p>
             <p style={{ marginBottom: 6, fontWeight: 600 }}>Trao đổi gần nhất</p>
@@ -322,7 +350,10 @@ export default function LeadsTab(props) {
                 <h4>Thông tin bổ sung</h4>
                 <ul style={{ paddingLeft: 16, color: "#475569" }}>
                   {Object.entries(activeLead.extra)
-                    .filter(([k]) => !["Trao đổi gần nhất", "Mô tả leadform"].includes(k))
+                    .filter(
+                      ([k]) =>
+                        !["Trao đổi gần nhất", "Mô tả leadform", "Tình trạng gọi điện", "Tình trạng cuộc gọi"].includes(k)
+                    )
                     .map(([k, v]) => (
                       <li key={k}>
                         <strong>{k}:</strong> {String(v || "-")}

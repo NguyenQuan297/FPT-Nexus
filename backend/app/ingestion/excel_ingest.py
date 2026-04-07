@@ -11,6 +11,7 @@ from typing import Any, List
 import pandas as pd
 from dateutil import parser as date_parser
 
+from app.core.call_status import internal_status_from_call_label
 from app.core.config import settings
 from app.core.constants import (
     LEAD_STATUS_ACTIVE,
@@ -26,15 +27,30 @@ log = logging.getLogger(__name__)
 MAX_ROWS = 50_000
 
 COLUMN_ALIASES = {
-    "external_id": ["Mã KH", "Mã khách hàng", "Mã khách hàng CRM"],
-    "name": ["Tên Học Sinh", "Tên học sinh", "Tên KH", "Name"],
-    "phone": ["Điện thoại phụ huynh", "Số điện thoại", "Điện thoại", "Phone", "SĐT", "SDT"],
+    "external_id": ["Mã KH", "Mã khách", "Mã khách hàng", "Mã khách hàng CRM"],
+    "name": ["Tên khách hàng", "Họ tên khách", "Họ và tên", "Họ tên", "Tên Học Sinh", "Tên học sinh", "Tên KH", "Name"],
+    "phone": [
+        "Số điện thoại khách",
+        "Điện thoại phụ huynh",
+        "Số điện thoại",
+        "Điện thoại",
+        "Phone",
+        "SĐT",
+        "SDT",
+    ],
     "phone_secondary": ["Số điện thoại 2", "Phone 2", "Điện thoại phụ huynh 2"],
     "created_at": ["Ngày tạo", "Created date", "Created at", "Ngày nhập", "Ngày lead", "Lead date", "Date"],
     "assigned_to": ["Người phụ trách", "Assignee", "Assigned to"],
-    "contact_status": ["Tình trạng gọi điện", "Trạng thái gọi", "Status", "Kết quả gọi", "Call status"],
+    "contact_status": [
+        "Tình trạng cuộc gọi",
+        "Tình trạng gọi điện",
+        "Trạng thái gọi",
+        "Status",
+        "Kết quả gọi",
+        "Call status",
+    ],
     "source": ["Nguồn khách hàng", "Lead source", "Source", "Kênh", "Campaign source"],
-    "branch": ["Cơ sở", "Chi nhánh", "Branch", "Campus", "Center"],
+    "branch": ["Khu vực", "Cơ sở", "Chi nhánh", "Branch", "Campus", "Center"],
     "notes": ["Ghi chú", "Trao đổi gần nhất", "Notes", "Note", "Nội dung trao đổi", "Comment"],
     "last_contact_at": ["Last contact at", "Lần liên hệ gần nhất", "Ngày liên hệ gần nhất"],
     "parent_name": ["Họ và tên phụ huynh", "Tên phụ huynh", "Phụ huynh"],
@@ -146,6 +162,10 @@ def _find_column_by_keywords(df: pd.DataFrame, field: str) -> str | None:
 def _status_from_contact_cell(raw: Any) -> str:
     if raw is None or (isinstance(raw, float) and pd.isna(raw)):
         return LEAD_STATUS_NEW
+    raw_s = str(raw).strip()
+    inferred = internal_status_from_call_label(raw_s)
+    if inferred is not None:
+        return inferred
     t = _norm(str(raw)).lower()
     if any(
         x in t
@@ -345,6 +365,11 @@ def parse_excel_bytes(
                 extra[str(c)] = (
                     str(v) if not isinstance(v, (datetime,)) else v.isoformat()
                 )
+
+        raw_contact_status = _cell_str(row, col_status) if col_status else None
+        if raw_contact_status:
+            extra["Tình trạng gọi điện"] = raw_contact_status
+            extra["Tình trạng cuộc gọi"] = raw_contact_status
 
         # Skip rows that are effectively empty; otherwise they become fake "new" leads
         # because created_at falls back to now().

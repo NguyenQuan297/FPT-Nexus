@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "../../api";
 import { styles } from "../../styles/appStyles";
 import { formatDt } from "../../utils/leadUiHelpers";
+import { BarFrequencyChart, ChartCard, LineTrendChart, ZoomableChart } from "../dashboard/DashboardCharts";
 
 export default function SalesHomeTab({
   stats,
@@ -62,7 +63,7 @@ export default function SalesHomeTab({
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
           <button type="button" style={styles.btn} onClick={onOpenMyLeads}>
-            Mở My Leads
+            Mở Leads của tôi
           </button>
           {overdue > 0 && (
             <button type="button" style={styles.btnGhost} onClick={onOpenOverdueLeads}>
@@ -94,72 +95,48 @@ export default function SalesHomeTab({
         <ul style={{ margin: 0, paddingLeft: 18, color: "#475569" }}>
           <li>Gọi / nhắn các lead chưa liên hệ ({uncontacted}).</li>
           <li>Xử lý trước các lead quá hạn SLA ({overdue}).</li>
-          <li>Ghi chú sau mỗi cuộc gọi trong My Leads.</li>
+          <li>Ghi chú sau mỗi cuộc gọi trong Leads của tôi.</li>
         </ul>
       </section>
 
       <section style={styles.card}>
         <h3 style={{ marginTop: 0 }}>Xu hướng 7 ngày</h3>
+        <p style={{ marginTop: -6, marginBottom: 10, fontSize: 12, color: "#64748b" }}>
+          Bấm vào biểu đồ để phóng to; đưa chuột lên cột hoặc đường để xem số liệu.
+        </p>
         <div style={styles.dashboardCharts}>
-          <div style={styles.chartCard}>
-            <div style={styles.chartTitle}>Lead mới / ngày</div>
-            <div style={styles.chartBody}>
-              <div style={{ ...styles.barChartWrap, opacity: chartProgress ? 1 : 0.2, transition: "opacity 0.35s ease" }}>
-                {trend7.map((p) => (
-                  <div key={p.day} style={styles.trendCol}>
-                    <div
-                      style={{
-                        ...styles.trendBar,
-                        height: `${Math.min(100, (p.value / (Math.max(...trend7.map((x) => x.value), 1) || 1)) * 100)}%`,
-                        minHeight: p.value ? 8 : 0,
-                      }}
-                    />
-                    <span style={{ fontSize: 11, color: "#64748b" }}>{p.day.slice(5)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div style={styles.chartCard}>
-            <div style={styles.chartTitle}>Tỷ lệ liên hệ (%)</div>
-            <div style={styles.chartBody}>
-              <div style={{ ...styles.barChartWrap, opacity: chartProgress ? 1 : 0.2, transition: "opacity 0.35s ease" }}>
-                {contactRate7.map((p) => (
-                  <div key={p.day} style={styles.trendCol}>
-                    <div
-                      style={{
-                        ...styles.trendBar,
-                        height: `${Math.min(100, p.value)}%`,
-                        background: "#86efac",
-                        minHeight: p.value ? 8 : 0,
-                      }}
-                    />
-                    <span style={{ fontSize: 11, color: "#64748b" }}>{p.day.slice(5)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div style={styles.chartCard}>
-            <div style={styles.chartTitle}>Chuyển đổi REG (%)</div>
-            <div style={styles.chartBody}>
-              <div style={{ ...styles.barChartWrap, opacity: chartProgress ? 1 : 0.2, transition: "opacity 0.35s ease" }}>
-                {conversionRate7.map((p) => (
-                  <div key={p.day} style={styles.trendCol}>
-                    <div
-                      style={{
-                        ...styles.trendBar,
-                        height: `${Math.min(100, p.value)}%`,
-                        background: "#93c5fd",
-                        minHeight: p.value ? 8 : 0,
-                      }}
-                    />
-                    <span style={{ fontSize: 11, color: "#64748b" }}>{p.day.slice(5)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <ChartCard title="Lead mới / ngày">
+            <ZoomableChart chartTitle="Lead mới / ngày (sale)">
+              {(z) => (
+                <div style={{ opacity: chartProgress ? 1 : 0.25, transition: "opacity 0.35s ease" }}>
+                  <BarFrequencyChart
+                    data={trend7}
+                    progress={chartProgress}
+                    zoomed={z}
+                    formatTooltipValue={(d) => `Số lead mới: ${d.value}`}
+                  />
+                </div>
+              )}
+            </ZoomableChart>
+          </ChartCard>
+          <ChartCard title="Tỷ lệ liên hệ (%)">
+            <ZoomableChart chartTitle="Tỷ lệ liên hệ (%) — sale">
+              {(z) => (
+                <div style={{ opacity: chartProgress ? 1 : 0.25, transition: "opacity 0.35s ease" }}>
+                  <LineTrendChart data={contactRate7} progress={chartProgress} zoomed={z} valueSuffix="%" />
+                </div>
+              )}
+            </ZoomableChart>
+          </ChartCard>
+          <ChartCard title="Chuyển đổi REG (%)">
+            <ZoomableChart chartTitle="Chuyển đổi REG (%) — sale">
+              {(z) => (
+                <div style={{ opacity: chartProgress ? 1 : 0.25, transition: "opacity 0.35s ease" }}>
+                  <LineTrendChart data={conversionRate7} progress={chartProgress} zoomed={z} valueSuffix="%" />
+                </div>
+              )}
+            </ZoomableChart>
+          </ChartCard>
         </div>
       </section>
     </div>

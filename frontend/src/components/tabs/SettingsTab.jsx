@@ -5,13 +5,7 @@ import { styles } from "../../styles/appStyles";
 
 const inputFull = { ...styles.input, minWidth: 280, width: "100%", maxWidth: 520, boxSizing: "border-box" };
 
-function isLocalhost() {
-  if (typeof window === "undefined") return false;
-  const h = window.location.hostname;
-  return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
-}
-
-export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLatestSync, setErr }) {
+export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLatestSync, setErr, onLogout }) {
   const [tgChat, setTgChat] = useState("");
   const [tgWidget, setTgWidget] = useState({
     available: false,
@@ -128,10 +122,14 @@ export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLate
     }
   };
 
-  const onLocalhost = isLocalhost();
-
   return (
-    <>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: "calc(100vh - 140px)",
+      }}
+    >
       <section style={styles.card}>
         <h3>Cài đặt hệ thống</h3>
         {user.role === "admin" ? (
@@ -141,10 +139,10 @@ export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLate
             </p>
             <p>Cập nhật lần cuối: {syncMeta?.last_updated ? formatDt(syncMeta.last_updated) : "-"}</p>
             <p>Tệp hiện tại: {syncMeta?.filename || "-"}</p>
-            <p style={{ color: "#475569", marginTop: -6 }}>
-              Tải xuống tại đây sẽ giữ nguyên template gốc (màu, cột, thứ tự) và chỉ cập nhật cột trạng thái gọi điện.
-            </p>
-            <div style={{ display: "flex", gap: 8 }}>
+            {syncMeta?.template_error ? (
+              <p style={{ color: "#b91c1c", marginTop: 4, fontSize: 13 }}>{syncMeta.template_error}</p>
+            ) : null}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               <button type="button" style={styles.btn} onClick={runExcelSync}>
                 Đồng bộ ngay
               </button>
@@ -200,18 +198,6 @@ export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLate
               {tgWidget.available && (
                 <div style={{ marginBottom: 16 }}>
                   <p style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Liên kết bằng tài khoản Telegram</p>
-                  {onLocalhost && (
-                    <p style={{ color: "#1e40af", background: "#eff6ff", padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 10 }}>
-                      Bạn đang mở app bằng <strong>localhost</strong>: sau khi bấm đăng nhập, Telegram có thể báo lỗi domain
-                      vì chưa có HTTPS + domain đã khai báo trong BotFather (<code>/setdomain</code>). Trên máy dev, cách
-                      chắc chắn là nhập <strong>chat_id</strong> ở mục bên dưới; khi deploy lên site HTTPS hãy dùng nút này.
-                    </p>
-                  )}
-                  {!onLocalhost && (
-                    <p style={{ color: "#475569", fontSize: 13, marginBottom: 8 }}>
-                      Đảm bảo trong BotFather đã chạy <code>/setdomain</code> với đúng domain trang này (HTTPS).
-                    </p>
-                  )}
                   <div ref={widgetMountRef} />
                 </div>
               )}
@@ -255,6 +241,23 @@ export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLate
           )}
         </section>
       )}
-    </>
+
+      {user.role === "admin" && typeof onLogout === "function" && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            alignItems: "center",
+            marginTop: "auto",
+            paddingTop: 20,
+            borderTop: "1px solid #e2e8f0",
+          }}
+        >
+          <button type="button" style={{ ...styles.btnGhost, fontWeight: 700 }} onClick={() => onLogout()}>
+            Đăng xuất
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

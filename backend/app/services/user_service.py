@@ -12,11 +12,49 @@ from app.repositories.lead_repository import LeadRepository
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.schemas.user_admin import UserCreate, UserPerformanceOut, UserUpdate
-from app.services import cache_service
+from app.services import cache_service, presence_service
 from app.services.sla_service import is_lead_overdue
 
 repo = UserRepository()
 lead_repo = LeadRepository()
+
+
+def _norm_assignee(v: object) -> str:
+    return " ".join(str(v or "").strip().split()).lower()
+
+
+async def _auto_merge_existing_leads_for_sale(
+    db: AsyncSession,
+    *,
+    username: str,
+    display_name: Optional[str],
+) -> int:
+    """
+    Auto-adopt old Excel assignee labels for new/updated sale account.
+    Match by normalized text (case + whitespace insensitive), then reassign exact labels.
+    """
+    dn = (display_name or "").strip()
+    if not dn:
+        return 0
+    target = _norm_assignee(dn)
+    if not target:
+        return 0
+    labels = await lead_repo.list_distinct_assignees(db)
+    merged = 0
+    for label in labels:
+        old = str(label or "").strip()
+        if not old:
+            continue
+        if _norm_assignee(old) != target:
+            continue
+        if old == username.strip():
+            continue
+        merged += await lead_repo.reassign_leads_from_label_to_username(
+            db, old_label=old, new_username=username
+        )
+    if merged:
+        await cache_service.cache_delete("dash:")
+    return merged
 
 
 async def create_user(db: AsyncSession, body: UserCreate) -> User:
@@ -27,7 +65,14 @@ async def create_user(db: AsyncSession, body: UserCreate) -> User:
         raise HTTPException(status_code=400, detail="Invalid role")
     pw = hash_password(body.password)
     dn = (body.display_name or "").strip() or None
-    return await repo.create(db, body.username, pw, body.role, display_name=dn)
+    user = await repo.create(db, body.username, pw, body.role, display_name=dn)
+    if user.role == "sale":
+        await _auto_merge_existing_leads_for_sale(
+            db,
+            username=user.username,
+            display_name=user.display_name,
+        )
+    return user
 
 
 async def update_user(db: AsyncSession, user_id: UUID, body: UserUpdate) -> tuple[User, int]:
@@ -54,6 +99,12 @@ async def update_user(db: AsyncSession, user_id: UUID, body: UserUpdate) -> tupl
             )
             if merged:
                 await cache_service.cache_delete("dash:")
+    elif "display_name" in data and user.role == "sale":
+        merged = await _auto_merge_existing_leads_for_sale(
+            db,
+            username=user.username,
+            display_name=user.display_name,
+        )
     return (await repo.save(db, user), merged)
 
 
@@ -78,6 +129,7 @@ def _normalize_enrollment_bucket(raw: object) -> str | None:
 
 async def list_user_performance(db: AsyncSession) -> List[UserPerformanceOut]:
     users = await repo.list_users(db)
+    online_map = await presence_service.get_online_map([u.id for u in users])
     now = datetime.now(timezone.utc)
     out: List[UserPerformanceOut] = []
     for u in users:
@@ -113,6 +165,7 @@ async def list_user_performance(db: AsyncSession) -> List[UserPerformanceOut]:
                 display_name=u.display_name,
                 role=u.role,
                 is_active=u.is_active,
+                is_online=online_map.get(str(u.id), False),
                 leads=total,
                 sla_pct=sla_pct,
                 reg_pct=reg_pct,

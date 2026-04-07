@@ -9,6 +9,7 @@ from app.core.security import decode_token
 from app.db.session import AsyncSessionLocal
 from app.repositories.user_repository import UserRepository
 from app.realtime.ws_manager import ws_manager
+from app.services import presence_service
 
 router = APIRouter(prefix="/realtime", tags=["realtime"])
 user_repo = UserRepository()
@@ -38,6 +39,7 @@ async def ws_events(websocket: WebSocket, token: str = Query("")):
         username=user.username,
         role=user.role,
     )
+    await presence_service.ws_connect(user.id)
     await websocket.send_json(
         {
             "type": "system.connected",
@@ -48,10 +50,13 @@ async def ws_events(websocket: WebSocket, token: str = Query("")):
         while True:
             msg = await websocket.receive_text()
             if msg.strip().lower() == "ping":
+                await presence_service.touch_online(user.id)
                 await websocket.send_json({"type": "system.pong", "payload": {}})
     except WebSocketDisconnect:
+        await presence_service.ws_disconnect(user.id)
         await ws_manager.disconnect(websocket)
     except Exception:
+        await presence_service.ws_disconnect(user.id)
         await ws_manager.disconnect(websocket)
         await websocket.close()
 

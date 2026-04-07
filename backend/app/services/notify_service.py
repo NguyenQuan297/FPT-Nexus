@@ -275,3 +275,60 @@ async def try_test_telegram_for_user(actor_user_id: UUID) -> Tuple[bool, str]:
         "Nếu không thấy tin thử khi bấm nút test, kiểm tra token bot trên server."
     )
     return telegram_send_message_result(token, chat, body)
+
+
+async def notify_admins_in_app_async(
+    db: AsyncSession,
+    *,
+    title: str,
+    body: str,
+) -> None:
+    """
+    Ghi thông báo trong app cho mọi tài khoản admin (độc lập với Telegram).
+    """
+    from app.repositories.notification_repository import NotificationRepository
+    from app.repositories.user_repository import UserRepository
+
+    t = (title or "Thông báo").strip()[:256]
+    b = (body or "").strip()[:12000]
+    if not b:
+        return
+    admins = await UserRepository().list_by_role(db, "admin")
+    if not admins:
+        return
+    repo = NotificationRepository()
+    for u in admins:
+        await repo.create(db, u.id, t, b)
+
+
+async def notify_sales_excel_upload_in_app_async(
+    *,
+    admin_username: str,
+    filename: str,
+    queued_rows: int,
+) -> None:
+    """
+    Ghi thông báo trong app cho mọi tài khoản sale khi admin tải file Excel.
+    Dùng session riêng sau khi upload handler đã commit batch.
+    """
+    from app.db.session import AsyncSessionLocal
+    from app.repositories.notification_repository import NotificationRepository
+    from app.repositories.user_repository import UserRepository
+    from app.services import notification_copy
+
+    title = "Admin tải file Excel"
+    body = notification_copy.in_app_text_upload_excel_for_sales(
+        admin_username, filename, queued_rows
+    )
+    t = (title or "").strip()[:256]
+    b = (body or "").strip()[:12000]
+    if not b:
+        return
+    async with AsyncSessionLocal() as db:
+        sales = await UserRepository().list_by_role(db, "sale")
+        if not sales:
+            return
+        repo = NotificationRepository()
+        for u in sales:
+            await repo.create(db, u.id, t, b)
+        await db.commit()

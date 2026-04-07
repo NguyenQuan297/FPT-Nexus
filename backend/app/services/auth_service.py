@@ -15,7 +15,10 @@ repo = UserRepository()
 async def authenticate(
     db: AsyncSession, username: str, password: str
 ) -> Optional[User]:
-    user = await repo.get_by_username(db, username)
+    uname = (username or "").strip()
+    if not uname:
+        return None
+    user = await repo.get_by_username(db, uname)
     if not user or not user.is_active:
         return None
     if not verify_password(password, user.password_hash):

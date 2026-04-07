@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { LEADS_PAGE_SIZE } from "../../constants/leadConstants";
+import { CALL_STATUS_OPTIONS, LEADS_PAGE_SIZE } from "../../constants/leadConstants";
 import { badge, styles } from "../../styles/appStyles";
-import { formatDt, isClientOverdue, statusLabel } from "../../utils/leadUiHelpers";
+import { callStatusFromLead, formatDt, isClientOverdue, statusLabel } from "../../utils/leadUiHelpers";
 import { parseConversationBlocks } from "../../utils/conversationNotes";
 
 const STATUS_OPTIONS = ["new", "contacting", "active", "late", "closed"];
@@ -20,6 +20,7 @@ export default function SalesLeadsTab({
   markContacted,
   appendNote,
   updateLeadStatus,
+  updateContactCallStatus,
   saveNotes,
   leadsPage,
   totalLeadPages,
@@ -35,11 +36,12 @@ export default function SalesLeadsTab({
   }, [activeLead?.notes]);
 
   const presetActive = !overdueOnly && !uncontactedOnly ? "all" : overdueOnly ? "overdue" : "uncontacted";
+  const detailCallStatus = activeLead ? callStatusFromLead(activeLead) : "";
 
   return (
     <div style={{ ...styles.split, alignItems: "stretch" }}>
       <section style={{ ...styles.card, flex: 1, minWidth: 280, maxWidth: 420, display: "flex", flexDirection: "column" }}>
-        <h3 style={{ marginTop: 0 }}>My Leads</h3>
+        <h3 style={{ marginTop: 0 }}>Leads của tôi</h3>
         <p style={{ fontSize: 13, color: "#64748b", marginTop: -6 }}>Chỉ lead được gán cho bạn — mỗi tài khoản độc lập.</p>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
           <button
@@ -101,6 +103,9 @@ export default function SalesLeadsTab({
                   <span style={badge(L.status)}>{statusLabel(L.status)}</span>
                   {L.phone ? ` · ${L.phone}` : ""}
                 </div>
+                {callStatusFromLead(L) ? (
+                  <div style={{ fontSize: 11, color: "#0f766e", marginTop: 4 }}>{callStatusFromLead(L)}</div>
+                ) : null}
                 <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{formatDt(L.created_at)}</div>
               </button>
             );
@@ -219,6 +224,24 @@ export default function SalesLeadsTab({
                 {STATUS_OPTIONS.map((s) => (
                   <option key={s} value={s}>
                     {statusLabel(s)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>Tình trạng gọi điện</label>
+              <select
+                style={{ ...styles.input, minWidth: 220 }}
+                value={detailCallStatus || ""}
+                onChange={(e) => updateContactCallStatus(activeLead.id, e.target.value)}
+              >
+                <option value="">— Chưa chọn —</option>
+                {detailCallStatus && !CALL_STATUS_OPTIONS.includes(detailCallStatus) ? (
+                  <option value={detailCallStatus}>{detailCallStatus} (từ dữ liệu)</option>
+                ) : null}
+                {CALL_STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
                   </option>
                 ))}
               </select>

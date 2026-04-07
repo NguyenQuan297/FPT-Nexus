@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, require_admin
 from app.models.user import User
 from app.schemas.user_admin import UserCreate, UserOut, UserPerformanceOut, UserUpdate
-from app.services import user_service
+from app.services import presence_service, user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -20,7 +20,13 @@ async def list_users(
     _: User = Depends(require_admin),
 ):
     users = await user_service.list_users(db)
-    return users
+    online_map = await presence_service.get_online_map([u.id for u in users])
+    return [
+        UserOut.model_validate(u).model_copy(
+            update={"is_online": online_map.get(str(u.id), False)}
+        )
+        for u in users
+    ]
 
 
 @router.get("/performance", response_model=List[UserPerformanceOut])
@@ -41,7 +47,7 @@ async def create_user(
         raise HTTPException(status_code=400, detail="Admin can only create sale users")
     u = await user_service.create_user(db, body)
     await db.commit()
-    return u
+    return UserOut.model_validate(u).model_copy(update={"is_online": False})
 
 
 @router.patch("/{user_id}", response_model=UserOut)
@@ -55,4 +61,10 @@ async def patch_user(
     await db.commit()
     await db.refresh(u)
     base = UserOut.model_validate(u)
-    return base.model_copy(update={"leads_reassigned_from_assignee": merged})
+    online_map = await presence_service.get_online_map([u.id])
+    return base.model_copy(
+        update={
+            "leads_reassigned_from_assignee": merged,
+            "is_online": online_map.get(str(u.id), False),
+        }
+    )
