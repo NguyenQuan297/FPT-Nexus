@@ -37,6 +37,7 @@ export function useDashboardApp() {
   const [statusMulti, setStatusMulti] = useState([]);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [uncontactedOnly, setUncontactedOnly] = useState(false);
+  const [callStatusOtherOnly, setCallStatusOtherOnly] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [leadsPage, setLeadsPage] = useState(1);
@@ -81,6 +82,7 @@ export function useDashboardApp() {
       overdueOnlyValue,
       uncontactedOnlyValue,
       statusesValue,
+      callStatusOtherOnlyValue,
       dateFromValue,
       dateToValue,
       pageValue,
@@ -91,6 +93,8 @@ export function useDashboardApp() {
       const overdueOnlyFinal = overdueOnlyValue ?? overdueOnly;
       const uncontactedOnlyFinal = uncontactedOnlyValue ?? uncontactedOnly;
       const statusesFinal = statusesValue ?? statusMulti;
+      const callStatusOtherOnlyFinal =
+        callStatusOtherOnlyValue ?? callStatusOtherOnly;
       const dateFromFinal = dateFromValue ?? dateFrom;
       const dateToFinal = dateToValue ?? dateTo;
       const pageFinal = pageValue ?? leadsPage;
@@ -99,13 +103,14 @@ export function useDashboardApp() {
       if (overdueOnlyFinal) qBase.set("overdue_only", "true");
       if (uncontactedOnlyFinal) qBase.set("uncontacted_only", "true");
       if (statusesFinal?.length) qBase.set("statuses", statusesFinal.join(","));
+      if (callStatusOtherOnlyFinal) qBase.set("contact_call_statuses", "Khác");
       if (dateFromFinal) qBase.set("date_from", dateFromFinal);
       if (dateToFinal) qBase.set("date_to", dateToFinal);
       qBase.set("page", String(pageFinal));
       qBase.set("limit", String(LEADS_PAGE_SIZE));
       return apiFetch(`/api/v1/leads/query?${qBase}`);
     },
-    [assigned, phone, overdueOnly, uncontactedOnly, statusMulti, dateFrom, dateTo, leadsPage]
+    [assigned, phone, overdueOnly, uncontactedOnly, statusMulti, callStatusOtherOnly, dateFrom, dateTo, leadsPage]
   );
 
   const load = useCallback(async () => {
@@ -180,7 +185,17 @@ export function useDashboardApp() {
 
   useEffect(() => {
     setLeadsPage(1);
-  }, [assigned, phone, overdueOnly, uncontactedOnly, statusMulti, dateFrom, dateTo, tab]);
+  }, [
+    assigned,
+    phone,
+    overdueOnly,
+    uncontactedOnly,
+    statusMulti,
+    callStatusOtherOnly,
+    dateFrom,
+    dateTo,
+    tab,
+  ]);
 
   useEffect(() => {
     if (user?.role === "sale") {
@@ -255,6 +270,7 @@ export function useDashboardApp() {
       setPhone("");
       setStatusMulti([]);
       setOverdueOnly(false);
+      setCallStatusOtherOnly(false);
       setDateFrom("");
       setDateTo("");
       setLeadsPage(1);
@@ -263,6 +279,7 @@ export function useDashboardApp() {
         phoneValue: "",
         overdueOnlyValue: false,
         statusesValue: [],
+        callStatusOtherOnlyValue: false,
         dateFromValue: "",
         dateToValue: "",
         pageValue: 1,
@@ -278,6 +295,7 @@ export function useDashboardApp() {
             phoneValue: "",
             overdueOnlyValue: false,
             statusesValue: [],
+            callStatusOtherOnlyValue: false,
             dateFromValue: "",
             dateToValue: "",
             pageValue: 1,
@@ -592,11 +610,15 @@ export function useDashboardApp() {
     setErr(null);
     try {
       const qBase = new URLSearchParams();
-      if (assigned.trim()) qBase.set("assigned_to", assigned.trim());
+      // For auto-assign flows we must select all leads matching the current "file" filters,
+      // regardless of whether the leads already have an assigned account/label.
+      const ignoreAssignedForAutoAssign = ["auto_assign_round_robin", "auto_assign_least_workload"].includes(bulkAction);
+      if (!ignoreAssignedForAutoAssign && assigned.trim()) qBase.set("assigned_to", assigned.trim());
       if (phone.trim()) qBase.set("phone", phone.trim());
       if (overdueOnly) qBase.set("overdue_only", "true");
       if (bulkOnlyUncontacted) qBase.set("uncontacted_only", "true");
       if (statusMulti?.length) qBase.set("statuses", statusMulti.join(","));
+      if (callStatusOtherOnly) qBase.set("contact_call_statuses", "Khác");
       if (dateFrom) qBase.set("date_from", dateFrom);
       if (dateTo) qBase.set("date_to", dateTo);
       const res = await apiFetch(`/api/v1/leads/query-ids?${qBase}`);
@@ -756,6 +778,8 @@ export function useDashboardApp() {
     setOverdueOnly,
     uncontactedOnly,
     setUncontactedOnly,
+    callStatusOtherOnly,
+    setCallStatusOtherOnly,
     dateFrom,
     setDateFrom,
     dateTo,

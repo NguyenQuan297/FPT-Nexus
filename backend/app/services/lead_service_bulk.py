@@ -10,12 +10,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.call_status import filter_leads_by_contact_call_status_labels
-from app.core.constants import LEAD_STATUS_ACTIVE
+from app.core.constants import LEAD_STATUS_ACTIVE, LEAD_STATUS_NEW
 from app.models.lead import Lead
 from app.models.user import User
 from app.schemas.lead import BulkActionBody, BulkActionOut, LeadFilterBody
 from app.realtime.events import publish_event
 from app.services import excel_sync_service, notification_copy, notify_service
+from app.services.lead_display_utils import assignee_display_for_lead, build_username_display_map
 from app.services.lead_service_core import (
     _ensure_extra_dict,
     _is_bad_phone,
@@ -157,12 +158,24 @@ async def bulk_apply_action(
     actor: User,
     body: BulkActionBody,
 ) -> BulkActionOut:
+    action = (body.action or "").strip().lower()
+    filters_for_target = body.filters
+    # For auto-assign actions, users expect to "split" all leads matching the filter coming
+    # from the imported file, not only those already having an assigned account/label.
+    # So we intentionally ignore the `assigned_to` filter when the action is auto-assign.
+    if (
+        body.apply_filtered
+        and filters_for_target is not None
+        and action in ("auto_assign_round_robin", "auto_assign_least_workload")
+        and (filters_for_target.assigned_to or "").strip()
+    ):
+        filters_for_target = filters_for_target.model_copy(update={"assigned_to": None})
     rows = await _resolve_bulk_target_leads(
         db,
         actor=actor,
         lead_ids=body.lead_ids,
         apply_filtered=body.apply_filtered,
-        filters=body.filters,
+        filters=filters_for_target,
         only_overdue=body.only_overdue,
     )
     total = len(rows)
@@ -172,7 +185,6 @@ async def bulk_apply_action(
     now = datetime.now(timezone.utc)
     affected = 0
     skipped = 0
-    action = (body.action or "").strip().lower()
 
     if action == "assign_to_user":
         if actor.role != "admin":
@@ -189,26 +201,102 @@ async def bulk_apply_action(
     elif action in ("auto_assign_round_robin", "auto_assign_least_workload"):
         if actor.role != "admin":
             raise HTTPException(status_code=403, detail="Chỉ admin mới được auto assign.")
-        users = [u for u in await user_repo.list_users(db) if u.role == "sale" and u.is_active]
-        if not users:
-            raise HTTPException(status_code=400, detail="Không có sale active để auto assign.")
-        users.sort(key=lambda x: x.username.lower())
+        sale_users = [u for u in await user_repo.list_users(db) if u.role == "sale" and u.is_active]
+
+        def _norm_ws(v: object) -> str:
+            return " ".join(str(v or "").split()).strip().lower()
+
+        # "Chia đều theo nhãn Người phụ trách trong Excel":
+        # - Pool nhãn lấy từ toàn bộ tập lead đang áp dụng (rows), để không bị bó hẹp theo
+        #   subset "mới" hay theo việc nhãn đó có tài khoản hay không.
+        # - Ưu tiên nhãn từ extra["assignee_display_label"] (nhãn gốc Excel nếu có),
+        #   fallback sang lead.assigned_to.
+        assignable_leads = [l for l in rows if l.status == LEAD_STATUS_NEW]
+        label_pool: list[str] = []
+        seen_labels = set()
+        for l in rows:
+            ex = l.extra if isinstance(l.extra, dict) else {}
+            lbl = str(ex.get("assignee_display_label") or l.assigned_to or "").strip()
+            if not lbl:
+                continue
+            key = _norm_ws(lbl)
+            if key and key not in seen_labels:
+                seen_labels.add(key)
+                label_pool.append(lbl)
+        label_pool.sort(key=lambda s: _norm_ws(s))
+
+        # Fallback: nếu không có nhãn từ file (edge case), dùng sale_users như trước.
+        if not label_pool:
+            label_pool = [str(u.display_name or u.username).strip() for u in sale_users if str(u.display_name or u.username).strip()]
+            label_pool.sort(key=lambda s: _norm_ws(s))
+        if not label_pool:
+            raise HTTPException(status_code=400, detail="Không có nhãn Người phụ trách để auto assign.")
+
+        # For least-workload, balance by current Lead counts for the label keys.
         if action == "auto_assign_least_workload":
-            counts = {
-                u.username: (
-                    await db.execute(select(func.count()).select_from(Lead).where(Lead.assigned_to == u.username))
-                ).scalar_one()
-                for u in users
-            }
-            users.sort(key=lambda u: (counts.get(u.username, 0), u.username.lower()))
-        idx = 0
-        for lead in rows:
-            target = users[idx % len(users)]
-            lead.assigned_to = target.username
-            lead.updated_at = now
-            lead.updated_by_user_id = actor.id
-            idx += 1
-            affected += 1
+            # Count workload using the same "assignee display" logic as the dashboard:
+            # extra.assignee_display_label (Excel) -> else username->display_name -> else assigned_to raw.
+            target_keys = sorted(set([lbl for lbl in label_pool if str(lbl).strip()]), key=lambda s: _norm_ws(s))
+            target_norms = {_norm_ws(x): x for x in target_keys}
+            counts: dict[str, int] = {k: 0 for k in target_keys}
+
+            # Build username->display map for sale users so username-based assignments are counted
+            # into their display label buckets.
+            sale_username_set = {(u.username or "").strip() for u in sale_users if (u.username or "").strip()}
+            username_display_map = await build_username_display_map(db, set(sale_username_set))
+
+            all_rows = await repo.list_leads(
+                db,
+                assigned_to=None,
+                status=None,
+                phone_search=None,
+                overdue_only=False,
+                sale_username_exact=None,
+                limit=100000,
+                offset=0,
+            )
+            for L in all_rows:
+                disp = assignee_display_for_lead(L, username_display_map)
+                dn = _norm_ws(disp)
+                if dn in target_norms:
+                    key = target_norms[dn]
+                    counts[key] = counts.get(key, 0) + 1
+
+            # Keep increasing counts as we assign.
+            for lead in rows:
+                if lead.status != LEAD_STATUS_NEW:
+                    skipped += 1
+                    continue
+                # choose least workload among resolved keys
+                least_key = min(target_keys, key=lambda k: (counts.get(k, 0), _norm_ws(k)))
+                chosen_label = least_key
+
+                # Assign by label (Excel assignee), not by login username.
+                lead.assigned_to = chosen_label
+                ex = _ensure_extra_dict(lead)
+                ex["assignee_display_label"] = chosen_label
+                lead.extra = ex
+                lead.updated_at = now
+                lead.updated_by_user_id = actor.id
+                counts[chosen_label] = counts.get(chosen_label, 0) + 1
+                affected += 1
+        else:
+            idx = 0
+            for lead in rows:
+                # Only assign brand-new leads. Other statuses are intentionally skipped.
+                if lead.status != LEAD_STATUS_NEW:
+                    skipped += 1
+                    continue
+                chosen_label = label_pool[idx % len(label_pool)]
+                # Assign by label (Excel assignee), not by login username.
+                lead.assigned_to = chosen_label
+                ex = _ensure_extra_dict(lead)
+                ex["assignee_display_label"] = chosen_label
+                lead.extra = ex
+                lead.updated_at = now
+                lead.updated_by_user_id = actor.id
+                idx += 1
+                affected += 1
 
     elif action == "status_new_to_contacting":
         for lead in rows:

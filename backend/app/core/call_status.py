@@ -33,6 +33,16 @@ CALL_STATUS_LABELS_VN: tuple[str, ...] = (
 )
 
 _EXTRA_CALL_KEYS = ("Tình trạng gọi điện", "Tình trạng cuộc gọi")
+CALL_STATUS_FILTER_OTHER_LABEL = "Khác"
+CALL_STATUS_FILTER_BASE_LABELS_VN: tuple[str, ...] = (
+    "Đã nghe máy",
+    "Chưa nghe máy lần 1",
+    "Chưa nghe máy lần 2",
+    "Gọi lại sau",
+    "Thuê bao",
+    "Máy bận",
+    "Chưa nghe máy lần 3",
+)
 
 
 def norm_call_label(s: object) -> str:
@@ -65,13 +75,20 @@ def filter_leads_by_contact_call_status_labels(rows: list, contact_call_statuses
     """Filter leads by call-status labels (matched after norm_call_label)."""
     if not contact_call_statuses:
         return rows
-    allowed = {norm_call_label(x) for x in contact_call_statuses if str(x).strip()}
-    if not allowed:
+    selected = {norm_call_label(x) for x in contact_call_statuses if str(x).strip()}
+    if not selected:
         return rows
+    other_key = norm_call_label(CALL_STATUS_FILTER_OTHER_LABEL)
+    include_other = other_key in selected
+    allowed_exact = {x for x in selected if x != other_key}
+    known_base = {norm_call_label(x) for x in CALL_STATUS_FILTER_BASE_LABELS_VN}
     out = []
     for r in rows:
         ex = getattr(r, "extra", None)
-        if norm_call_label(lead_extra_call_status_label(ex if isinstance(ex, dict) else None)) in allowed:
+        label = norm_call_label(lead_extra_call_status_label(ex if isinstance(ex, dict) else None))
+        match_exact = label in allowed_exact
+        match_other = include_other and bool(label) and label not in known_base
+        if match_exact or match_other:
             out.append(r)
     return out
 

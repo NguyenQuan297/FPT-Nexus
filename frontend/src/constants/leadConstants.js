@@ -2,6 +2,14 @@ export const STATUS_OPTIONS = ["new", "uncontacted", "contacting", "active", "la
 
 /** Call-status labels (Excel / CRM). */
 export const CALL_STATUS_OPTIONS = [
+  "Khác",
+  "Đã nghe máy",
+  "Chưa nghe máy lần 1",
+  "Chưa nghe máy lần 2",
+  "Gọi lại sau",
+  "Thuê bao",
+  "Máy bận",
+  "Chưa nghe máy lần 3",
   "Chưa gọi",
   "Đã gọi - Không nghe máy",
   "Đã gọi - Thuê bao",

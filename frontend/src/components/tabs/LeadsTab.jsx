@@ -17,6 +17,8 @@ export default function LeadsTab(props) {
     setOverdueOnly,
     statusMulti,
     toggleStatus,
+    callStatusOtherOnly,
+    setCallStatusOtherOnly,
     onApplyFilters,
     selected,
     selectedCount,
@@ -89,6 +91,14 @@ export default function LeadsTab(props) {
               {s === "new" ? "Mới (trống thông tin liên hệ)" : statusLabel(s)}
             </label>
           ))}
+          <label style={styles.chk}>
+            <input
+              type="checkbox"
+              checked={callStatusOtherOnly}
+              onChange={(e) => setCallStatusOtherOnly(e.target.checked)}
+            />{" "}
+            Khác (tình trạng gọi)
+          </label>
         </div>
 
         {user.role === "admin" && (
@@ -107,13 +117,7 @@ export default function LeadsTab(props) {
                 <option value="auto_assign_least_workload">Tự gán cho người ít việc nhất</option>
                 <option value="status_new_to_contacting">Chuyển trạng thái: Mới -&gt; Đang liên hệ</option>
                 <option value="status_contacting_to_da_nghe_may">Chuyển trạng thái: Đang liên hệ -&gt; Đã nghe máy</option>
-                <option value="mark_contacted">Đánh dấu đã liên hệ (cập nhật trao đổi gần nhất)</option>
-                <option value="update_interest">Cập nhật mức độ quan tâm</option>
-                <option value="set_follow_up">Đặt ngày chăm sóc lại</option>
-                <option value="mark_can_delete">Đánh dấu lead cần xóa</option>
-                <option value="detect_duplicates">Tìm lead trùng số điện thoại</option>
-                <option value="detect_bad_phone">Kiểm tra số điện thoại lỗi</option>
-                <option value="export_selected_csv">Xuất dữ liệu đã chọn (CSV)</option>
+                <option value="mark_contacted">Đánh dấu đã liên hệ</option>
               </select>
               <button style={styles.btnGhost} onClick={onClearSelection}>Bỏ chọn</button>
             </div>
@@ -138,21 +142,7 @@ export default function LeadsTab(props) {
                   ))}
                 </select>
               )}
-              {bulkAction === "update_interest" && (
-                <select style={styles.input} value={bulkInterest} onChange={(e) => setBulkInterest(e.target.value)}>
-                  <option value="Quan tâm">Quan tâm</option>
-                  <option value="Suy nghĩ thêm">Suy nghĩ thêm</option>
-                  <option value="Không quan tâm">Không quan tâm</option>
-                </select>
-              )}
-              {bulkAction === "set_follow_up" && (
-                <input
-                  type="datetime-local"
-                  style={styles.input}
-                  value={bulkFollowUpAt}
-                  onChange={(e) => setBulkFollowUpAt(e.target.value)}
-                />
-              )}
+              {/* Các hành động khác (cập nhật quan tâm, chăm sóc lại, kiểm tra số...) đã ẩn khỏi dropdown */}
               <button style={styles.btn} disabled={bulkWorking} onClick={onRunBulkAction}>
                 {bulkWorking ? "Đang xử lý..." : "Thực hiện"}
               </button>

@@ -58,6 +58,8 @@ export default function DashboardTabRoutes({ app }) {
     setDateTo,
     statusMulti,
     toggleStatus,
+    callStatusOtherOnly,
+    setCallStatusOtherOnly,
     selected,
     selectedCount,
     currentPageAllSelected,
@@ -203,6 +205,8 @@ export default function DashboardTabRoutes({ app }) {
           setOverdueOnly={setOverdueOnly}
           statusMulti={statusMulti}
           toggleStatus={toggleStatus}
+          callStatusOtherOnly={callStatusOtherOnly}
+          setCallStatusOtherOnly={setCallStatusOtherOnly}
           onApplyFilters={() => load()}
           selected={selected}
           selectedCount={selectedCount}
