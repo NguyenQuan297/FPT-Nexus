@@ -13,7 +13,12 @@ from app.services.lead_display_utils import (
     build_username_display_map,
     leads_to_lead_outs,
 )
-from app.core.call_status import filter_leads_by_contact_call_status_labels
+from app.core.call_status import (
+    filter_leads_by_contact_call_status_labels,
+    lead_extra_call_status_label,
+    norm_call_label,
+)
+from app.core.constants import VALID_LEAD_STATUSES
 from app.services.sla_service import sla_deadline
 
 
@@ -36,6 +41,32 @@ def _normalize_enrollment_bucket(raw: object) -> str | None:
     if text == "ne" or "nhập học" in text:
         return "NE"
     return None
+
+
+def _lead_has_excel_contact_info(lead) -> bool:
+    extra = getattr(lead, "extra", None)
+    if not isinstance(extra, dict):
+        return False
+    return bool(lead_extra_call_status_label(extra))
+
+
+def _lead_is_excel_uncontacted(lead) -> bool:
+    extra = getattr(lead, "extra", None)
+    if not isinstance(extra, dict):
+        return False
+    label = norm_call_label(lead_extra_call_status_label(extra))
+    if not label:
+        return False
+    return any(
+        token in label
+        for token in (
+            "chưa liên hệ",
+            "chua lien he",
+            "chưa gọi",
+            "chua goi",
+            "not contacted",
+        )
+    )
 
 
 async def query_leads_page(
@@ -78,7 +109,22 @@ async def query_leads_page(
 
     if statuses:
         status_set = {s.strip() for s in statuses if s and s.strip()}
-        rows = [r for r in rows if r.status in status_set]
+        workflow_statuses = {s for s in status_set if s in VALID_LEAD_STATUSES and s != "new"}
+        include_new_blank_contact_info = "new" in status_set
+        include_uncontacted_excel = "uncontacted" in status_set
+        rows = [
+            r
+            for r in rows
+            if (
+                (r.status in workflow_statuses)
+                or (
+                    include_new_blank_contact_info
+                    and r.status == "new"
+                    and not _lead_has_excel_contact_info(r)
+                )
+                or (include_uncontacted_excel and _lead_is_excel_uncontacted(r))
+            )
+        ]
 
     rows = filter_leads_by_contact_call_status_labels(rows, contact_call_statuses)
 

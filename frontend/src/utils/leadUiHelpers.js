@@ -17,6 +17,7 @@ export function renderEventText(evt) {
 export function statusLabel(status) {
   const map = {
     new: "Mới",
+    uncontacted: "Chưa liên hệ",
     contacting: "Đang liên hệ",
     active: "Đã liên hệ",
     late: "Trễ hạn",

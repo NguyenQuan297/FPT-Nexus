@@ -85,7 +85,8 @@ export default function LeadsTab(props) {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
           {STATUS_OPTIONS.map((s) => (
             <label key={s} style={styles.chk}>
-              <input type="checkbox" checked={statusMulti.includes(s)} onChange={() => toggleStatus(s)} /> {statusLabel(s)}
+              <input type="checkbox" checked={statusMulti.includes(s)} onChange={() => toggleStatus(s)} />{" "}
+              {s === "new" ? "Mới (trống thông tin liên hệ)" : statusLabel(s)}
             </label>
           ))}
         </div>
