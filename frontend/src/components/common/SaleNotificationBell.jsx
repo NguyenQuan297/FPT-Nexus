@@ -1,6 +1,6 @@
 import { styles } from "../../styles/appStyles";
 
-/** Chuông + số thông báo chưa đọc (sale). Bấm → mở tab Thông báo; trang sẽ đánh dấu đã xem và reset số. */
+/** Sale: unread count; opens notifications tab. */
 export default function SaleNotificationBell({ unreadCount, onOpen }) {
   return (
     <button

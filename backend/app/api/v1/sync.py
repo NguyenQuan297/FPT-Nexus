@@ -27,10 +27,7 @@ async def upload_sync_template(
     file: UploadFile = File(...),
     _: User = Depends(require_admin),
 ):
-    """
-    Lưu file Excel mẫu (định dạng gốc) để đồng bộ — không nhập dữ liệu vào DB.
-    Dùng khi cần khôi phục template sau khi đổi máy chủ hoặc chưa từng upload Excel.
-    """
+    """Store the original Excel as the sync export template (does not import rows)."""
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="File rỗng")

@@ -67,7 +67,7 @@ export default function UsersTab({
       await patchUser(editing.id, payload);
       closeEdit();
     } catch {
-      // lỗi đã hiển thị ở App
+      // error surfaced in App
     }
   }
 

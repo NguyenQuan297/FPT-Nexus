@@ -2,9 +2,7 @@ import AdminNotificationBell from "../common/AdminNotificationBell";
 import SaleNotificationBell from "../common/SaleNotificationBell";
 import { styles } from "../../styles/appStyles";
 
-/**
- * Thanh trên vùng nội dung: badge trạng thái, upload Excel (admin), chuông thông báo / đăng xuất.
- */
+/** Top bar: status badges, Excel upload (admin), notifications, logout. */
 export default function AppTopBar({
   user,
   roleLabel,

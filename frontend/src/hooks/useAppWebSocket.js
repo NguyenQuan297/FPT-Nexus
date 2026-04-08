@@ -2,10 +2,7 @@ import { useEffect } from "react";
 import { apiFetch, getToken } from "../api";
 import { renderEventText } from "../utils/leadUiHelpers";
 
-/**
- * WebSocket realtime: toast sự kiện, làm mới lead/notif/báo cáo/sync khi server đẩy tin nhắn.
- * Ping định kỳ + tự cắt bớt toast cũ.
- */
+/** Realtime WebSocket: refresh data and toasts on server events. */
 export function useAppWebSocket({
   user,
   tab,

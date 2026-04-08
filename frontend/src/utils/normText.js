@@ -1,4 +1,4 @@
-/** Chuẩn hóa chuỗi để so khớp tên hiển thị / gán lead (không phân biệt hoa thường, gộp khoảng trắng). */
+/** Lowercase, trim, collapse spaces — for assignee/display matching. */
 export function normText(v) {
   return String(v || "")
     .trim()

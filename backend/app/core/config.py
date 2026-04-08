@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Luôn đọc backend/.env dù chạy uvicorn từ thư mục gốc repo hay từ backend/
+# Load backend/.env (works whether cwd is repo root or backend/)
 _BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 _ENV_FILE = _BACKEND_DIR / ".env"
 
@@ -29,9 +29,11 @@ class Settings(BaseSettings):
     aws_region: str = "ap-southeast-1"
     s3_bucket: Optional[str] = None
     upload_dir: str = "./uploads"
+    #: Vite build output dir (contains index.html) when API also serves the SPA.
+    frontend_dist: Optional[str] = None
 
     telegram_bot_token: Optional[str] = None
-    #: Username bot (không có @) — dùng cho nút "Đăng nhập Telegram" trên web; BotFather: /setdomain
+    #: Bot username without @ (Telegram login widget; BotFather /setdomain for HTTPS).
     telegram_bot_username: Optional[str] = None
     telegram_chat_id: Optional[str] = None
     smtp_host: Optional[str] = None

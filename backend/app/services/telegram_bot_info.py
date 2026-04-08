@@ -1,4 +1,4 @@
-"""Lấy username bot từ Telegram getMe (không bắt buộc TELEGRAM_BOT_USERNAME trong .env)."""
+"""Resolve bot username via getMe when TELEGRAM_BOT_USERNAME is unset."""
 
 from __future__ import annotations
 
@@ -11,18 +11,12 @@ from app.core.config import settings
 
 log = logging.getLogger(__name__)
 
-# Tránh gọi getMe lặp lại mỗi request (token đổi hiếm)
+# Cache getMe per token (tokens rarely change)
 _username_by_token: dict[str, str] = {}
 
 
 async def resolve_bot_username_for_widget() -> Tuple[bool, Optional[str], bool]:
-    """
-    Trả về (widget_available, bot_username không có @, username_resolve_failed).
-
-    - Ưu tiên TELEGRAM_BOT_USERNAME trong .env.
-    - Nếu không có, gọi getMe với TELEGRAM_BOT_TOKEN.
-    - username_resolve_failed: có token nhưng không lấy được username (token sai / mạng).
-    """
+    """Returns (widget_available, bot_username_without_at, username_resolve_failed)."""
     token = (settings.telegram_bot_token or "").strip()
     env_u = (settings.telegram_bot_username or "").strip().lstrip("@")
     if env_u:

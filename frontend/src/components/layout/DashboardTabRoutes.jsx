@@ -9,10 +9,7 @@ import SalesLeadsTab from "../tabs/SalesLeadsTab";
 import NotificationsTab from "../tabs/NotificationsTab";
 import { styles } from "../../styles/appStyles";
 
-/**
- * Chọn tab nội dung theo `user.role` + `tab` (router thủ công trong SPA).
- * Props lấy từ `useDashboardApp()` — gom một object để file này chỉ lo JSX.
- */
+/** Tab panels by role + active tab (single-page routing). */
 export default function DashboardTabRoutes({ app }) {
   const {
     user,

@@ -1,8 +1,4 @@
-"""
-Nghiệp vụ lead dạng hàng loạt: gán nhiều lead, bulk action (trạng thái, nhãn Excel…), export CSV theo lọc.
-
-Phụ thuộc `lead_service_core` (repo, scope, helper extra/phone).
-"""
+"""Bulk lead ops: mass assign, bulk actions, filtered CSV export. Uses lead_service_core helpers."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

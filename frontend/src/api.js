@@ -15,7 +15,7 @@ export async function apiFetch(path, opts = {}) {
   const { timeoutMs: timeoutOpt, ...fetchOpts } = opts;
   const headers = { ...fetchOpts.headers };
   const t = getToken();
-  // Không gửi token cũ khi đăng nhập — tránh xung đột / nhầm lỗi
+  // Omit Bearer token on login to avoid stale-token conflicts
   const isLogin = String(path || "").includes("/auth/login");
   if (t && !isLogin) headers["Authorization"] = `Bearer ${t}`;
   if (fetchOpts.body && !(fetchOpts.body instanceof FormData) && !headers["Content-Type"]) {
@@ -57,7 +57,7 @@ export async function apiFetch(path, opts = {}) {
         if (txt) msg = txt;
       }
     } catch {
-      // giữ msg mặc định
+      // keep default msg
     }
     throw new Error(msg);
   }

@@ -1,6 +1,6 @@
 export const STATUS_OPTIONS = ["new", "contacting", "active", "late"];
 
-/** Nhãn «Tình trạng gọi điện» đồng bộ Excel / CRM (ảnh nghiệp vụ). */
+/** Call-status labels (Excel / CRM). */
 export const CALL_STATUS_OPTIONS = [
   "Chưa gọi",
   "Đã gọi - Không nghe máy",

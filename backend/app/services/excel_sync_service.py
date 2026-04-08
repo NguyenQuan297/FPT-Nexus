@@ -112,7 +112,7 @@ def _phone_digits(value: Any) -> str:
 
 _EXCEL_MAX_CELL_STR = 32000
 
-# Mẫu ảnh 1 — thứ tự cột cố định khi xuất snapshot (chưa có file .xlsx mẫu)
+# Fixed column order for snapshot export when no bundled template
 CANONICAL_EXCEL_HEADERS: list[str] = [
     "Mã KH",
     "Tên khách hàng",
@@ -158,10 +158,7 @@ def _count_exchange_blocks(notes: str) -> int:
 
 
 def _one_line_to_img1(line: str) -> str:
-    """
-    Mẫu ảnh 1 (một dòng / lần trao đổi):
-    «Tên hiển thị HH:mm DD/MM/YYYY: nội dung»
-    """
+    """Normalize one exchange line to: display_name HH:mm DD/MM/YYYY: body"""
     line = line.strip()
     if not line:
         return ""
@@ -190,7 +187,7 @@ def _one_line_to_img1(line: str) -> str:
 
 
 def _normalize_exchange_block_to_img1(block: str) -> str:
-    """Một lần trao đổi → đúng một dòng mẫu ảnh 1."""
+    """One exchange block -> one canonical line."""
     block = block.strip()
     if not block:
         return ""
@@ -201,7 +198,7 @@ def _normalize_exchange_block_to_img1(block: str) -> str:
     first, rest_lines = lines[0], lines[1:]
     rest = " ".join(rest_lines).replace("\n", " ")
 
-    # Ảnh 2: [DD/MM/YYYY HH:mm:ss] rồi dòng «Tên: ghi chú»
+    # Alt format: [DD/MM/YYYY HH:mm:ss] then "Name: note"
     if first.startswith("["):
         m = re.match(r"^\[(\d{2}/\d{2}/\d{4})\s+(\d{2}:\d{2}:\d{2})\]\s*$", first)
         m2 = re.match(r"^([^:]+):\s*(.*)$", rest)
@@ -221,7 +218,7 @@ def _normalize_exchange_block_to_img1(block: str) -> str:
 
 
 def format_exchange_notes_for_excel_export(notes: str) -> str:
-    """Nhiều lần trao đổi: mỗi lần một dòng «Tên HH:mm DD/MM/YYYY: …», xuống dòng trong cùng ô."""
+    """Multiple exchanges: one line each, newline-separated in the cell."""
     if not (notes or "").strip():
         return ""
     raw = notes.strip()
@@ -270,7 +267,7 @@ def _bump_row_height_for_text(ws, row: int, text: str) -> None:
 
 
 def _exchange_text_for_excel(lead: Lead) -> str:
-    """Cột «Trao đổi gần nhất»: chuẩn hóa đúng mẫu (tên + ngày giờ dòng đầu, nội dung phía dưới)."""
+    """Latest exchange column: normalized name/time line + body."""
     n = (lead.notes or "").strip()
     if n:
         return format_exchange_notes_for_excel_export(n)
@@ -307,7 +304,7 @@ def _status_for_excel(lead: Lead) -> str:
 
 
 def _status_cell_for_excel(lead: Lead) -> str:
-    """Ưu tiên cột «Tình trạng cuộc gọi» / «Tình trạng gọi điện» trong extra (đúng tên file mẫu)."""
+    """Prefer call-status keys from extra if present, else derive from workflow."""
     ex = lead.extra or {}
     for k in ("Tình trạng cuộc gọi", "Tình trạng gọi điện"):
         v = ex.get(k)
@@ -675,9 +672,7 @@ def _apply_updates_to_template(
 
 
 def _build_snapshot_workbook(rows: list[Lead], display_map: Dict[str, str]):
-    """
-    Fallback khi chưa có file mẫu: sheet 17 cột đúng mẫu ảnh 1 (header vàng).
-    """
+    """Fallback workbook when no template: 17 columns, yellow header row."""
     wb = Workbook()
     ws = wb.active
     ws.title = "danhsachkhachhang"

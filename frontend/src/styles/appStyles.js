@@ -11,7 +11,6 @@ export const styles = {
     boxShadow: "8px 0 30px rgba(10,22,40,0.35)",
   },
   navItem: { textAlign: "left", padding: "10px 12px", borderRadius: 8, border: "none", background: "transparent", color: "#cbd5e1", cursor: "pointer", fontWeight: 600 },
-  /* Màu thương hiệu FPT: cam chủ đạo, không dùng tím indigo */
   navItemActive: {
     background: "linear-gradient(90deg, #ea580c 0%, #F37021 55%, #fb923c 100%)",
     color: "#fff",

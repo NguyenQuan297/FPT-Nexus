@@ -19,7 +19,7 @@ class User(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     username: Mapped[str] = mapped_column(String(128), unique=True, index=True)
-    #: Tên hiển thị / người phụ trách (vd từ Excel), khác username đăng nhập
+    #: Display name / Excel assignee label (may differ from login username)
     display_name: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(256))
     role: Mapped[str] = mapped_column(String(32), index=True)

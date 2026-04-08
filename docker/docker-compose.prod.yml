@@ -1,0 +1,57 @@
+# Production stack: Postgres + Redis + app (API + SPA in one image).
+# From repo root: docker compose -f docker/docker-compose.prod.yml up -d --build
+#
+# Set JWT_SECRET and SEED_ADMIN_PASSWORD (first boot) via env or .env next to this file.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: leads
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/leads
+      SYNC_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/leads
+      REDIS_URL: redis://redis:6379/0
+      UPLOAD_DIR: /app/backend/uploads
+      FRONTEND_DIST: /app/backend/static
+      # Replace with real HTTPS origin(s) when deployed
+      CORS_ORIGINS: http://127.0.0.1:8000,http://localhost:8000
+      # Strong secret: openssl rand -hex 32
+      JWT_SECRET: ${JWT_SECRET:-change-me-set-in-production}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-admin}
+    volumes:
+      - app_uploads:/app/backend/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  app_uploads:

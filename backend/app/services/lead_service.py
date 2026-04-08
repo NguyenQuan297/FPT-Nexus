@@ -1,9 +1,4 @@
-"""
-Facade công khai cho nghiệp vụ lead.
-
-- Logic chi tiết: `lead_service_core` (CRUD/query/đơn lẻ), `lead_service_bulk` (hàng loạt).
-- Giữ `from app.services import lead_service` để router/worker không phải đổi import.
-"""
+"""Lead service facade: re-exports core + bulk for stable imports."""
 from app.services.lead_service_bulk import bulk_apply_action, bulk_assign, bulk_export_csv_rows
 from app.services.lead_service_core import (
     assign_lead,

@@ -116,7 +116,7 @@ def _deliver_admin_telegram(text: str, *, pref_telegram: Optional[str]) -> None:
         log.debug("Telegram notify skipped (TELEGRAM_BOT_TOKEN not set)")
         return
     if not tg_chat:
-        log.debug("Telegram notify skipped (no chat_id in Cài đặt or TELEGRAM_CHAT_ID)")
+        log.debug("Telegram notify skipped (no chat_id in settings or TELEGRAM_CHAT_ID)")
         return
     ok, detail = telegram_send_message_result(token, tg_chat, text)
     if not ok:
@@ -214,11 +214,8 @@ async def notify_admin_action_async(
     text: str,
     actor_user_id: Optional[UUID] = None,
 ) -> None:
-    """
-    Gửi đến mọi kênh admin: TELEGRAM_CHAT_ID trong .env (nếu có) và
-    tất cả chat_id admin đã liên kết trong Cài đặt (DB). Không trùng.
-    """
-    _ = actor_user_id  # tương thích gọi cũ (assign/upload); định tuyến dùng env + prefs admin
+    """Send to all admin Telegram channels: env TELEGRAM_CHAT_ID plus DB-linked admin chats (deduped)."""
+    _ = actor_user_id  # legacy signature; routing uses env + admin prefs
     token = (settings.telegram_bot_token or "").strip()
     if not token:
         log.debug("Telegram notify skipped (TELEGRAM_BOT_TOKEN not set)")
@@ -226,8 +223,7 @@ async def notify_admin_action_async(
     chats = await _resolve_admin_telegram_chat_id_list()
     if not chats:
         log.debug(
-            "Telegram notify skipped (chưa có TELEGRAM_CHAT_ID trong .env "
-            "và chưa có admin nào liên kết Telegram trong Cài đặt)"
+            "Telegram notify skipped (no TELEGRAM_CHAT_ID in env and no admin linked Telegram in DB)"
         )
         return
     body = text.strip()[:4000]
@@ -243,7 +239,7 @@ async def notify_admin_action_async(
 
 
 async def try_test_telegram_for_user(actor_user_id: UUID) -> Tuple[bool, str]:
-    """Gửi một tin test; trả về (thành công theo API Telegram, mô tả cho UI)."""
+    """Send a test message; returns (Telegram API success, message for UI)."""
     token = (settings.telegram_bot_token or "").strip()
     pref_tg: Optional[str] = None
     try:
@@ -283,9 +279,7 @@ async def notify_admins_in_app_async(
     title: str,
     body: str,
 ) -> None:
-    """
-    Ghi thông báo trong app cho mọi tài khoản admin (độc lập với Telegram).
-    """
+    """Create in-app notifications for all admin accounts (independent of Telegram)."""
     from app.repositories.notification_repository import NotificationRepository
     from app.repositories.user_repository import UserRepository
 
@@ -307,10 +301,7 @@ async def notify_sales_excel_upload_in_app_async(
     filename: str,
     queued_rows: int,
 ) -> None:
-    """
-    Ghi thông báo trong app cho mọi tài khoản sale khi admin tải file Excel.
-    Dùng session riêng sau khi upload handler đã commit batch.
-    """
+    """Notify all sales users in-app after admin Excel upload (uses its own session after batch commit)."""
     from app.db.session import AsyncSessionLocal
     from app.repositories.notification_repository import NotificationRepository
     from app.repositories.user_repository import UserRepository

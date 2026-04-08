@@ -18,7 +18,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     password: Optional[str] = Field(None, min_length=6, max_length=256)
     display_name: Optional[str] = Field(None, max_length=512)
-    #: Khớp chính xác chuỗi người phụ trách trong Excel (assigned_to); gán toàn bộ lead đó sang username của user này
+    #: Exact Excel assignee string; reassign those leads to this user's username
     merge_leads_from_assignee: Optional[str] = Field(None, max_length=512)
 
 
@@ -29,7 +29,7 @@ class UserOut(BaseModel):
     role: str
     is_active: bool
     is_online: bool = False
-    #: Chỉ có khi PATCH user (số lead đã đổi assigned_to từ nhãn Excel sang username)
+    #: Set on PATCH: count of leads reassigned from Excel label to username
     leads_reassigned_from_assignee: Optional[int] = None
 
     model_config = {"from_attributes": True}

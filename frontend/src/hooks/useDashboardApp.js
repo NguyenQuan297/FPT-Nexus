@@ -5,19 +5,8 @@ import { downloadAuthorizedBlob } from "../utils/downloadBlob";
 import { normText } from "../utils/normText";
 import { useAppWebSocket } from "./useAppWebSocket";
 
-/**
- * Gom state + side effect + handler cho màn authenticated (admin/sale).
- *
- * Khối comment theo thứ tự:
- * 1) State
- * 2) Tải dữ liệu (API helpers + load)
- * 3) Effect đồng bộ tab / trang / user
- * 4) Handler (upload, user, lead, bulk, export, logout)
- * 5) Giá trị suy ra (memo)
- * 6) Realtime WebSocket
- */
+/** Authenticated app state, loaders, and handlers (admin + sale). */
 export function useDashboardApp() {
-  // --- 1) State: phiên, tab, lỗi, toast ---
   const [user, setUser] = useState(null);
   const [boot, setBoot] = useState(true);
   const [tab, setTab] = useState("dashboard");
@@ -26,7 +15,6 @@ export function useDashboardApp() {
   const [uploading, setUploading] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
-  // --- 1) State: dataset lead & biểu đồ ---
   const [stats, setStats] = useState(null);
   const [leads, setLeads] = useState([]);
   const [leadsTotal, setLeadsTotal] = useState(0);
@@ -36,7 +24,6 @@ export function useDashboardApp() {
   const [activeLeadId, setActiveLeadId] = useState(null);
   const [chartProgress, setChartProgress] = useState(0);
 
-  // --- 1) State: bộ lọc danh sách lead (admin + sale) ---
   const [assigned, setAssigned] = useState("");
   const [phone, setPhone] = useState("");
   const [statusMulti, setStatusMulti] = useState([]);
@@ -47,7 +34,6 @@ export function useDashboardApp() {
   const [leadsPage, setLeadsPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
 
-  // --- 1) State: admin (user, báo cáo, sync, bulk) ---
   const [notifs, setNotifs] = useState([]);
   const [users, setUsers] = useState([]);
   const [report, setReport] = useState(null);
@@ -69,7 +55,6 @@ export function useDashboardApp() {
   const [bulkWorking, setBulkWorking] = useState(false);
   const [syncMeta, setSyncMeta] = useState(null);
 
-  // --- 2) Bootstrap phiên (cookie / token) ---
   useEffect(() => {
     if (!getToken()) {
       setBoot(false);
@@ -81,7 +66,6 @@ export function useDashboardApp() {
       .finally(() => setBoot(false));
   }, []);
 
-  // --- 2) Gọi API query lead (dùng cho load + upload + bulk sau này) ---
   const fetchLeadDataset = useCallback(
     async ({
       assignedValue,
@@ -182,12 +166,10 @@ export function useDashboardApp() {
     }
   }, [repY, repM, worstMinDays, worstMaxDays, user]);
 
-  // --- 3) Đổi bộ lọc → về trang 1 ---
   useEffect(() => {
     setLeadsPage(1);
   }, [assigned, phone, overdueOnly, uncontactedOnly, statusMulti, dateFrom, dateTo, tab]);
 
-  // --- 3) Sale: không dùng tab admin ---
   useEffect(() => {
     if (user?.role === "sale") {
       setTab((t) =>
@@ -196,7 +178,6 @@ export function useDashboardApp() {
     }
   }, [user]);
 
-  // --- 3) Đăng nhập xong: load lead + notif + sync meta ---
   useEffect(() => {
     if (!user) return;
     load().catch((e) => setErr(String(e.message || e)));
@@ -206,7 +187,6 @@ export function useDashboardApp() {
     return () => clearInterval(id);
   }, [user, load, loadNotifs, loadSyncMeta, leadsPage]);
 
-  // --- 3) Sale mở tab thông báo → đánh dấu đã đọc ---
   useEffect(() => {
     if (user?.role !== "sale" || tab !== "notifications") return;
     let cancelled = false;
@@ -223,7 +203,6 @@ export function useDashboardApp() {
     };
   }, [tab, user?.role, loadNotifs]);
 
-  // --- 3) Vào tab cần danh sách user/assignee ---
   useEffect(() => {
     if (tab === "leads" && user?.role === "admin") {
       loadUsers().catch(() => {});
@@ -246,7 +225,6 @@ export function useDashboardApp() {
     return () => window.clearInterval(id);
   }, [tab, user, loadUsers]);
 
-  // --- 4) Upload Excel (admin): reset filter, chờ queue nếu có ---
   async function onUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -552,7 +530,7 @@ export function useDashboardApp() {
       try {
         await apiFetch("/api/v1/auth/logout", { method: "POST", timeoutMs: 8000 });
       } catch {
-        /* vẫn xóa token local */
+        /* ignore */
       }
     }
     setToken(null);
@@ -629,7 +607,6 @@ export function useDashboardApp() {
     setLeadsPage(Math.max(1, Math.min(totalLeadPages, Math.trunc(v))));
   }
 
-  // --- 5) Giá trị suy ra ---
   const activeLead = useMemo(() => leads.find((x) => x.id === activeLeadId) || null, [leads, activeLeadId]);
   const selectedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
   const currentPageIds = useMemo(() => leads.map((x) => x.id), [leads]);
@@ -714,7 +691,6 @@ export function useDashboardApp() {
     return () => window.clearInterval(id);
   }, []);
 
-  // --- 6) Realtime ---
   useAppWebSocket({
     user,
     tab,

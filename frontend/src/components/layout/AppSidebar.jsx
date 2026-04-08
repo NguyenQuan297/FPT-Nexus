@@ -2,9 +2,7 @@ import NavItem from "../common/NavItem";
 import BrandLogo from "../common/BrandLogo";
 import { styles } from "../../styles/appStyles";
 
-/**
- * Thanh điều hướng trái: logo, menu khác nhau cho admin vs sale.
- */
+/** Left nav: logo and role-based items. */
 export default function AppSidebar({ user, tab, setTab, loadUsers, loadAssignees, loadReport }) {
   return (
     <aside style={styles.sidebar}>

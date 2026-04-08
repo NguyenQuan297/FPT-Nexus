@@ -1,11 +1,13 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 import app.models  # noqa: F401 — register ORM metadata
 
@@ -137,3 +139,14 @@ app.include_router(v1_router, prefix="/api/v1")
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# Optional SPA: mount when FRONTEND_DIST contains index.html (same origin as API)
+_dist = settings.frontend_dist
+if _dist:
+    _dist_path = Path(_dist)
+    if _dist_path.is_dir() and (_dist_path / "index.html").is_file():
+        log.info("Serving SPA static files from %s", _dist_path.resolve())
+        app.mount("/", StaticFiles(directory=str(_dist_path), html=True), name="spa")
+    else:
+        log.warning("FRONTEND_DIST is set but invalid (need index.html): %s", _dist)

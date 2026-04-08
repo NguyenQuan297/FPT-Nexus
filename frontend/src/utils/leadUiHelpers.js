@@ -25,7 +25,7 @@ export function statusLabel(status) {
   return map[status] || status || "-";
 }
 
-/** Nhãn tình trạng gọi điện (extra), khác trạng thái workflow. */
+/** Call-status label from extra fields (not workflow status). */
 export function callStatusFromLead(lead) {
   const ex = lead?.extra;
   if (!ex || typeof ex !== "object") return "";

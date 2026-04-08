@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { barColor, styles, toneColor } from "../../styles/appStyles";
 
-/** Nhãn trục: ISO YYYY-MM-DD → d/m hoặc d/m/yy nếu khác năm hiện tại. */
+/** Axis label: ISO YYYY-MM-DD → d/m or d/m/yy if not current year. */
 export function formatTrendAxisLabel(day) {
   if (typeof day !== "string") return String(day);
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day.trim());

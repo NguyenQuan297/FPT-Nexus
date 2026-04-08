@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../../api";
 import { formatDt } from "../../utils/leadUiHelpers";
-/**
- * Chuông thông báo (đặt trong header topbar để căn hàng với badge/nút).
- * Mỗi thao tác sale → đếm unread; mở panel → đánh dấu đã đọc (số về 0).
- */
+/** Admin: notification dropdown in top bar. */
 export default function AdminNotificationBell({ notifs, loadNotifs, setErr }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);

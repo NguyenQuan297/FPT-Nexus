@@ -1,4 +1,4 @@
-"""Văn bản thông báo Telegram / admin — tiếng Việt, dễ đọc (không UUID, không key kỹ thuật)."""
+"""Human-readable Telegram / in-app notification text (Vietnamese product copy)."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def status_vi(code: str) -> str:
 
 
 def lead_who(lead: Lead) -> str:
-    """Tên + SĐT để người đọc nhận ra khách."""
+    """Short lead label (name + phone) for messages."""
     name = (lead.name or "").strip()
     phone = (lead.phone or "").strip()
     bits = []
@@ -101,7 +101,7 @@ def telegram_text_update_lead(
 
 
 def sale_lead_update_should_notify(body: LeadUpdateBody) -> bool:
-    """Có thay đổi thực sự cần báo admin (tránh PATCH rỗng)."""
+    """True if PATCH should notify admins (skip no-op updates)."""
     if body.append_note and str(body.append_note).strip():
         return True
     if body.notes is not None:
@@ -159,7 +159,7 @@ def telegram_text_upload_excel(username: str, filename: str, queued_rows: int) -
 
 
 def in_app_text_upload_excel_for_sales(admin_username: str, filename: str, queued_rows: int) -> str:
-    """Thông báo trong app (sale) khi admin tải Excel — khác bản Telegram nhưng cùng nội dung chính."""
+    """In-app message for sales when admin uploads Excel."""
     return (
         f"Quản trị viên «{admin_username}» vừa tải lên file «{filename}».\n"
         f"Đã đưa {queued_rows} dòng vào hàng đợi xử lý."
@@ -167,5 +167,5 @@ def in_app_text_upload_excel_for_sales(admin_username: str, filename: str, queue
 
 
 def sla_lead_one_line(lead: Lead) -> str:
-    """Một dòng mô tả lead cho cảnh báo SLA (không UUID)."""
+    """One-line lead summary for SLA alerts."""
     return lead_who(lead)

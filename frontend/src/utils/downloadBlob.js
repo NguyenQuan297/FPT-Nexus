@@ -1,9 +1,6 @@
 import { getToken } from "../api";
 
-/**
- * GET có Bearer token, tải blob và kích hoạt download trình duyệt.
- * Dùng cho export CSV/XLSX khi không đi qua apiFetch (cần raw Response/blob).
- */
+/** GET with Bearer token; trigger browser download of CSV/XLSX blob. */
 export async function downloadAuthorizedBlob(url, filename) {
   const r = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
   if (!r.ok) throw new Error(await r.text());

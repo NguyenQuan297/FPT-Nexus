@@ -1,4 +1,4 @@
-"""Gắn nhãn hiển thị người phụ trách (Excel) cho LeadOut — tránh vòng import lead_service ↔ lead_query_service."""
+"""Assignee display labels for LeadOut (avoids circular imports with lead_query_service)."""
 
 from __future__ import annotations
 

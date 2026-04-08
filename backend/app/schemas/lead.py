@@ -16,7 +16,7 @@ class LeadOut(BaseModel):
     phone: Optional[str]
     phone_normalized: Optional[str]
     assigned_to: Optional[str]
-    #: Tên người phụ trách như Excel / hiển thị; khác username đăng nhập khi đã gộp hoặc gán sale
+    #: Display assignee (Excel label); may differ from login username after merge
     assigned_to_display: Optional[str] = None
     status: str
     source: Optional[str]
@@ -53,11 +53,11 @@ class LeadAssignBody(BaseModel):
 class LeadUpdateBody(BaseModel):
     status: Optional[str] = None
     notes: Optional[str] = None
-    #: Thêm dòng trao đổi (có timestamp + user); không ghi đè toàn bộ notes
+    #: Appends one exchange line (timestamped); does not replace full notes
     append_note: Optional[str] = Field(default=None, max_length=4000)
     mark_contacted: bool = False
     last_contact_at: Optional[datetime] = None
-    #: Nhãn «Tình trạng gọi điện» (Excel); ghi vào extra; chuỗi rỗng = xóa
+    #: Call-status label (Excel); stored in extra; empty string clears
     contact_call_status: Optional[str] = Field(default=None, max_length=400)
 
 
@@ -71,7 +71,7 @@ class LeadFilterBody(BaseModel):
     phone: Optional[str] = None
     overdue_only: bool = False
     statuses: List[str] = Field(default_factory=list)
-    #: Lọc theo nhãn tình trạng gọi điện (extra), khớp sau chuẩn hoá khoảng trắng / hoa thường
+    #: Filter by call-status labels in extra (normalized match)
     contact_call_statuses: List[str] = Field(default_factory=list)
     date_from: Optional[datetime] = None
     date_to: Optional[datetime] = None

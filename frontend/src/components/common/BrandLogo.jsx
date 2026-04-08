@@ -1,8 +1,4 @@
-/**
- * Sidebar: PNG Nexus (nền trong suốt, public/logo-nexus-sidebar.png).
- * Đăng nhập: SVG vector (nền sáng).
- * Tab trình duyệt: favicon trong index.html (favicon.png).
- */
+/** Sidebar: PNG from /logo-nexus-sidebar.png; login: inline SVG; tab icon: index.html favicon. */
 const SIDEBAR_LOGO_SRC = "/logo-nexus-sidebar.png?v=3";
 function LogoSvg({ darkBg }) {
   const edu = darkBg ? "#93c5fd" : "#005DAA";

@@ -1,4 +1,4 @@
-"""Canonical «Tình trạng gọi điện» labels (Excel / CRM) and mapping to workflow status."""
+"""Call-status labels (Excel/CRM) and mapping to workflow status."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from app.core.constants import (
     LEAD_STATUS_NEW,
 )
 
-# Thứ tự đồng bộ với file Excel / UI (ảnh khách hàng).
+# Order matches Excel export / UI
 CALL_STATUS_LABELS_VN: tuple[str, ...] = (
     "Chưa gọi",
     "Đã gọi - Không nghe máy",
@@ -62,7 +62,7 @@ def set_extra_call_status_labels(extra: dict, label: str) -> dict:
 
 
 def filter_leads_by_contact_call_status_labels(rows: list, contact_call_statuses: Optional[list]) -> list:
-    """Lọc lead theo nhãn tình trạng gọi điện (so khớp sau norm_call_label)."""
+    """Filter leads by call-status labels (matched after norm_call_label)."""
     if not contact_call_statuses:
         return rows
     allowed = {norm_call_label(x) for x in contact_call_statuses if str(x).strip()}
@@ -77,9 +77,7 @@ def filter_leads_by_contact_call_status_labels(rows: list, contact_call_statuses
 
 
 def internal_status_from_call_label(label: str) -> Optional[str]:
-    """
-    Gợi ý lead.status khi cập nhật tình trạng gọi điện (chuỗi chuẩn hoặc gần đúng).
-    """
+    """Map call-status label to suggested lead.status (exact or fuzzy)."""
     raw = str(label or "").strip()
     if not raw:
         return None

@@ -17,7 +17,7 @@ class NotificationChannelsUpdate(BaseModel):
 
 
 class TelegramWidgetAuth(BaseModel):
-    """Payload từ Telegram Login Widget (data-onauth)."""
+    """Telegram Login Widget payload (data-onauth)."""
 
     id: int
     first_name: str
@@ -32,5 +32,5 @@ class TelegramWidgetStatus(BaseModel):
     widget_available: bool
     bot_username: Optional[str] = None
     has_bot_token: bool = False
-    #: True khi có token nhưng không lấy được username (token sai / chặn mạng / getMe lỗi)
+    #: True if token set but getMe failed (bad token / network)
     username_resolve_failed: bool = False

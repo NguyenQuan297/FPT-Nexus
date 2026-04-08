@@ -5,10 +5,7 @@ import AppSidebar from "./components/layout/AppSidebar";
 import AppTopBar from "./components/layout/AppTopBar";
 import DashboardTabRoutes from "./components/layout/DashboardTabRoutes";
 
-/**
- * Root SPA: xác thực → layout 2 cột (sidebar + main) → nội dung tab.
- * Logic state/API nằm trong `useDashboardApp`; UI tách `components/layout/*`.
- */
+/** Root layout: auth gate, shell, tab content from `useDashboardApp`. */
 export default function App() {
   const app = useDashboardApp();
   const { user, setUser, boot, loadUsers, loadAssignees, loadReport } = app;

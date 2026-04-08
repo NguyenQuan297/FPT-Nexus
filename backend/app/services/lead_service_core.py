@@ -1,9 +1,4 @@
-"""
-Nghiệp vụ lead (core): ingest/merge, truy vấn, gán đơn lẻ, cập nhật field, export danh sách.
-
-Bulk (gán hàng loạt, bulk action, export theo lọc) nằm trong `lead_service_bulk.py`.
-Facade `lead_service.py` re-export toàn bộ để API layer không đổi import.
-"""
+"""Lead core: ingest, query, single assign/update, list export. Bulk ops: lead_service_bulk."""
 from __future__ import annotations
 
 import logging
