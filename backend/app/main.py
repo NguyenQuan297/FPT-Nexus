@@ -8,6 +8,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.requests import Request
 
 import app.models  # noqa: F401 — register ORM metadata
 
@@ -134,6 +135,20 @@ app.add_middleware(
 )
 
 app.include_router(v1_router, prefix="/api/v1")
+
+@app.middleware("http")
+async def _spa_no_cache_for_html(request: Request, call_next):
+    """
+    Avoid sticky SPA updates: browsers may cache "/" and index.html aggressively.
+    Assets are content-hashed, so only HTML needs no-cache.
+    """
+    resp = await call_next(request)
+    if request.method == "GET":
+        p = request.url.path or "/"
+        if p == "/" or p.endswith(".html"):
+            resp.headers["Cache-Control"] = "no-store, max-age=0"
+            resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @app.get("/health")
