@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiFetch, getToken, setToken } from "../api";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  apiFetch,
+  getToken,
+  setToken,
+  TIMEOUT_BULK_MS,
+  TIMEOUT_SYNC_MS,
+  TIMEOUT_UPLOAD_MS,
+} from "../api";
 import { LEADS_PAGE_SIZE } from "../constants/leadConstants";
 import { downloadAuthorizedBlob } from "../utils/downloadBlob";
 import { normText } from "../utils/normText";
@@ -22,7 +29,8 @@ export function useDashboardApp() {
   const [contactRate7, setContactRate7] = useState([]);
   const [conversionRate7, setConversionRate7] = useState([]);
   const [activeLeadId, setActiveLeadId] = useState(null);
-  const [chartProgress, setChartProgress] = useState(0);
+  const [chartProgress, setChartProgress] = useState(1);
+  const prevTabForChartsRef = useRef(null);
 
   const [assigned, setAssigned] = useState("");
   const [phone, setPhone] = useState("");
@@ -104,19 +112,23 @@ export function useDashboardApp() {
     setErr(null);
     try {
       const res = await fetchLeadDataset();
-      setStats(res.stats || null);
-      setLeads(res.items || []);
-      setLeadsTotal(res.total || 0);
-      setTrend7(res.trend_7d || []);
-      setContactRate7(res.contact_rate_7d || []);
-      setConversionRate7(res.conversion_rate_7d || []);
+      startTransition(() => {
+        setStats(res.stats || null);
+        setLeads(res.items || []);
+        setLeadsTotal(res.total || 0);
+        setTrend7(res.trend_7d || []);
+        setContactRate7(res.contact_rate_7d || []);
+        setConversionRate7(res.conversion_rate_7d || []);
+      });
     } catch (e) {
-      setStats(null);
-      setLeads([]);
-      setLeadsTotal(0);
-      setTrend7([]);
-      setContactRate7([]);
-      setConversionRate7([]);
+      startTransition(() => {
+        setStats(null);
+        setLeads([]);
+        setLeadsTotal(0);
+        setTrend7([]);
+        setContactRate7([]);
+        setConversionRate7([]);
+      });
       setErr(String(e.message || e));
     }
   }, [fetchLeadDataset]);
@@ -234,7 +246,11 @@ export function useDashboardApp() {
     fd.append("file", file);
     fd.append("replace_existing", "true");
     try {
-      const res = await apiFetch("/api/v1/upload/excel", { method: "POST", body: fd });
+      const res = await apiFetch("/api/v1/upload/excel", {
+        method: "POST",
+        body: fd,
+        timeoutMs: TIMEOUT_UPLOAD_MS,
+      });
       setAssigned("");
       setPhone("");
       setStatusMulti([]);
@@ -273,12 +289,14 @@ export function useDashboardApp() {
           if (stableHits >= 2 && lastTotal > 0) break;
         }
       }
-      setStats(res2.stats || null);
-      setLeads(res2.items || []);
-      setLeadsTotal(res2.total || 0);
-      setTrend7(res2.trend_7d || []);
-      setContactRate7(res2.contact_rate_7d || []);
-      setConversionRate7(res2.conversion_rate_7d || []);
+      startTransition(() => {
+        setStats(res2.stats || null);
+        setLeads(res2.items || []);
+        setLeadsTotal(res2.total || 0);
+        setTrend7(res2.trend_7d || []);
+        setContactRate7(res2.contact_rate_7d || []);
+        setConversionRate7(res2.conversion_rate_7d || []);
+      });
       loadNotifs();
       if (user?.role === "admin") await loadSyncMeta();
       if (user?.role === "admin") await loadAssignees();
@@ -489,6 +507,7 @@ export function useDashboardApp() {
         const res = await apiFetch("/api/v1/leads/bulk-actions", {
           method: "POST",
           body: JSON.stringify(payload),
+          timeoutMs: TIMEOUT_BULK_MS,
         });
         setToasts((prev) => [...prev.slice(-3), { id: Date.now() + Math.random(), text: res.message || "Đã chạy bulk action." }]);
       }
@@ -506,7 +525,7 @@ export function useDashboardApp() {
     if (user?.role !== "admin") return;
     setErr(null);
     try {
-      await apiFetch("/api/v1/sync/run", { method: "POST" });
+      await apiFetch("/api/v1/sync/run", { method: "POST", timeoutMs: TIMEOUT_SYNC_MS });
       await loadSyncMeta();
     } catch (x) {
       setErr(String(x.message || x));
@@ -679,12 +698,19 @@ export function useDashboardApp() {
     setPageInput(String(leadsPage));
   }, [leadsPage]);
 
+  // Intro animation only when switching from another tab into dashboard/sales-home — not on data refresh.
   useEffect(() => {
-    if (tab !== "dashboard" && tab !== "sales-home") return;
+    const was = prevTabForChartsRef.current;
+    prevTabForChartsRef.current = tab;
+    const inDash = tab === "dashboard" || tab === "sales-home";
+    if (!inDash) return;
+    const wasInDash = was === "dashboard" || was === "sales-home";
+    const entersFromOther = was != null && !wasInDash;
+    if (!entersFromOther) return;
     setChartProgress(0);
-    const id = window.setTimeout(() => setChartProgress(1), 40);
+    const id = window.setTimeout(() => setChartProgress(1), 45);
     return () => window.clearTimeout(id);
-  }, [tab, totalLeads, uncontacted, overdueCount, contactedToday, trend7]);
+  }, [tab]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNowTick(Date.now()), 1000);

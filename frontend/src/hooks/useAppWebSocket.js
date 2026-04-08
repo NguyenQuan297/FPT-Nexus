@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { apiFetch, getToken } from "../api";
 import { renderEventText } from "../utils/leadUiHelpers";
 
@@ -13,6 +13,8 @@ export function useAppWebSocket({
   loadAssignees,
   setToasts,
 }) {
+  const loadDebounceRef = useRef(null);
+
   useEffect(() => {
     if (!user) return;
     const t = getToken();
@@ -31,7 +33,11 @@ export function useAppWebSocket({
         const data = JSON.parse(evt.data);
         if (data.type && data.type !== "system.connected" && data.type !== "system.pong") {
           setToasts((prev) => [...prev.slice(-3), { id: Date.now() + Math.random(), text: renderEventText(data) }]);
-          load().catch(() => {});
+          if (loadDebounceRef.current) clearTimeout(loadDebounceRef.current);
+          loadDebounceRef.current = setTimeout(() => {
+            loadDebounceRef.current = null;
+            load().catch(() => {});
+          }, 500);
           if (data.type === "notification.created" && user.role === "sale" && tab === "notifications") {
             apiFetch("/api/v1/notifications/read-all", { method: "POST" })
               .then(() => loadNotifs())
@@ -58,6 +64,7 @@ export function useAppWebSocket({
     }, 25000);
     const removeToast = setInterval(() => setToasts((prev) => prev.slice(1)), 5000);
     return () => {
+      if (loadDebounceRef.current) clearTimeout(loadDebounceRef.current);
       clearInterval(pingId);
       clearInterval(removeToast);
       ws.close();

@@ -9,7 +9,16 @@ export function setToken(t) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
-const DEFAULT_TIMEOUT_MS = 25000;
+/** Default for JSON/API calls (EC2 + large datasets can exceed a few seconds). */
+export const TIMEOUT_DEFAULT_MS = 60000;
+/** Excel upload + server ingest can take minutes on large files or small instances. */
+export const TIMEOUT_UPLOAD_MS = 600000;
+/** Regenerate synced workbook / heavy server work. */
+export const TIMEOUT_SYNC_MS = 300000;
+/** Bulk lead actions on many rows. */
+export const TIMEOUT_BULK_MS = 180000;
+
+const IS_DEV = import.meta.env.DEV;
 
 export async function apiFetch(path, opts = {}) {
   const { timeoutMs: timeoutOpt, ...fetchOpts } = opts;
@@ -21,7 +30,7 @@ export async function apiFetch(path, opts = {}) {
   if (fetchOpts.body && !(fetchOpts.body instanceof FormData) && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
-  const timeoutMs = timeoutOpt ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = timeoutOpt ?? TIMEOUT_DEFAULT_MS;
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), timeoutMs);
   let r;
@@ -30,12 +39,16 @@ export async function apiFetch(path, opts = {}) {
   } catch (e) {
     if (e.name === "AbortError") {
       throw new Error(
-        "Request timed out. Is the API running (uvicorn on port 8000) and is PostgreSQL up?"
+        IS_DEV
+          ? "Request timed out. Is the API on :8000 up and PostgreSQL running? Large Excel uploads need a longer wait — try again or a smaller file."
+          : "Request timed out. The server may still be processing a large upload — wait and refresh. If it persists, check EC2 Security Group (port 8000), that the app container is healthy, and PostgreSQL is up."
       );
     }
     if (e instanceof TypeError && String(e.message).includes("fetch")) {
       throw new Error(
-        "Cannot reach API. Use the Vite dev server (npm run dev → http://localhost:5173) or ensure the backend is running."
+        IS_DEV
+          ? "Cannot reach API. Run `npm run dev` (Vite) and ensure the backend is on http://127.0.0.1:8000."
+          : "Cannot reach API. Open the app at the same host as the API (e.g. http://YOUR_SERVER_IP:8000), not a separate static host unless it proxies /api. Check Security Group/firewall for port 8000 and that Docker containers are running."
       );
     }
     throw e;
