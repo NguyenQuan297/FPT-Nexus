@@ -23,6 +23,7 @@ CALL_STATUS_LABELS_VN: tuple[str, ...] = (
     "Đã gọi - Không quan tâm",
     "Đã gọi - Quan tâm",
     "Đã gọi - Tiềm năng",
+    "Đã gọi - Suy nghĩ thêm",
     "Đã gọi - Đã chốt",
     "Đã gọi - Đã gửi mail",
     "Đã gọi - Đã gửi zalo",
@@ -131,6 +132,7 @@ def internal_status_from_call_label(label: str) -> Optional[str]:
         for x in (
             "quan tâm",
             "tiềm năng",
+            "suy nghĩ thêm",
             "gửi mail",
             "gửi zalo",
             "báo giá",

@@ -170,6 +170,17 @@ async def get_lead(
     return lead
 
 
+async def delete_lead(
+    db: AsyncSession, lead_id: UUID, current_user: User
+) -> bool:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can delete leads")
+    deleted = await repo.delete(db, lead_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return True
+
+
 async def get_dashboard_stats(
     db: AsyncSession,
     current_user: User,
@@ -197,8 +208,10 @@ async def query_leads_page(
     uncontacted_only: bool = False,
     statuses: Optional[List[str]] = None,
     contact_call_statuses: Optional[List[str]] = None,
+    call_status_groups: Optional[List[str]] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    enrollment_bucket: Optional[str] = None,
     page: int = 1,
     limit: int = 20,
 ) -> LeadQueryResponse:
@@ -212,8 +225,10 @@ async def query_leads_page(
         uncontacted_only=uncontacted_only,
         statuses=statuses,
         contact_call_statuses=contact_call_statuses,
+        call_status_groups=call_status_groups,
         date_from=date_from,
         date_to=date_to,
+        enrollment_bucket=enrollment_bucket,
         page=page,
         limit=limit,
     )
@@ -229,6 +244,7 @@ async def query_lead_ids(
     uncontacted_only: bool = False,
     statuses: Optional[List[str]] = None,
     contact_call_statuses: Optional[List[str]] = None,
+    call_status_groups: Optional[List[str]] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
 ) -> List[UUID]:
@@ -255,6 +271,25 @@ async def query_lead_ids(
         allowed = {s.strip() for s in statuses if s and s.strip()}
         rows = [r for r in rows if r.status in allowed]
     rows = filter_leads_by_contact_call_status_labels(rows, contact_call_statuses)
+    if call_status_groups:
+        from app.core.call_status import lead_extra_call_status_label, norm_call_label as _ncl
+        _NO_CONTACT = {"", _ncl("Chưa gọi"), _ncl("Chưa liên hệ")}
+        _CONTACTING = {_ncl(x) for x in ("Chưa nghe máy lần 1", "Chưa nghe máy lần 2", "Chưa nghe máy lần 3", "Gọi lại sau", "Thuê bao", "Máy bận", "Đã gọi - Không nghe máy", "Đã gọi - Thuê bao", "Đã gọi - Bận", "Đã gọi - Hẹn gọi lại", "Đã gọi - Nhầm máy")}
+        _CONTACTED = {_ncl(x) for x in ("Đã nghe máy", "Đã gọi - Quan tâm", "Đã gọi - Tiềm năng", "Đã gọi - Suy nghĩ thêm", "Đã gọi - Không quan tâm", "Đã gọi - Đã chốt", "Đã gọi - Đã gửi mail", "Đã gọi - Đã gửi zalo", "Đã gọi - Đã gửi báo giá", "Đã gọi - Đã gửi hợp đồng", "Đã gọi - Đã thanh toán", "Đã gọi - Đã hoàn thành")}
+        groups = {g.strip() for g in call_status_groups if g.strip()}
+        filtered = []
+        for r in rows:
+            ex = getattr(r, "extra", None)
+            lbl = _ncl(lead_extra_call_status_label(ex if isinstance(ex, dict) else None))
+            if "chua_lien_he" in groups and (lbl in _NO_CONTACT or r.status == "new"):
+                filtered.append(r); continue
+            if "dang_lien_he" in groups and lbl in _CONTACTING:
+                filtered.append(r); continue
+            if "da_lien_he" in groups and lbl in _CONTACTED:
+                filtered.append(r); continue
+            if "khac" in groups and lbl not in _NO_CONTACT and lbl not in _CONTACTING and lbl not in _CONTACTED:
+                filtered.append(r); continue
+        rows = filtered
     if uncontacted_only:
         rows = [r for r in rows if r.last_contact_at is None and r.status != "closed"]
     if date_from:
@@ -384,6 +419,20 @@ async def update_lead_fields(
             inferred = internal_status_from_call_label((body.contact_call_status or "").strip())
             if inferred is not None:
                 lead.status = inferred
+        # Auto-update interest level from call status
+        _ccs = (body.contact_call_status or "").strip().lower()
+        _interest_map = {
+            "quan tâm": "Quan tâm",
+            "không quan tâm": "Không quan tâm",
+            "tiềm năng": "Tiềm năng",
+            "đã chốt": "Đã chốt",
+            "suy nghĩ thêm": "Suy nghĩ thêm",
+        }
+        for keyword, level in _interest_map.items():
+            if keyword in _ccs:
+                ex["Mức độ quan tâm"] = level
+                lead.extra = ex
+                break
 
     lead.updated_at = now
     lead.updated_by_user_id = actor.id
@@ -411,7 +460,7 @@ async def update_lead_fields(
             "old_status": old_status,
         },
     )
-    if actor.role == "sale" and notification_copy.sale_lead_update_should_notify(body):
+    if notification_copy.sale_lead_update_should_notify(body):
         detail = notification_copy.telegram_text_update_lead(
             actor.username,
             getattr(actor, "display_name", None),
@@ -419,11 +468,12 @@ async def update_lead_fields(
             old_status,
             body,
         )
-        await notify_service.notify_admins_in_app_async(
-            db,
-            title="Sale cập nhật lead",
-            body=detail,
-        )
+        if actor.role == "sale":
+            await notify_service.notify_admins_in_app_async(
+                db,
+                title="Sale cập nhật lead",
+                body=detail,
+            )
         await notify_service.notify_admin_action_async(
             text=detail,
             actor_user_id=None,

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../../api";
 import { formatDt } from "../../utils/leadUiHelpers";
 import { styles } from "../../styles/appStyles";
 
 const inputFull = { ...styles.input, minWidth: 280, width: "100%", maxWidth: 520, boxSizing: "border-box" };
 
-export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLatestSync, setErr, onLogout }) {
+export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLatestSync, setErr }) {
   const [tgChat, setTgChat] = useState("");
   const [tgWidget, setTgWidget] = useState({
     available: false,
@@ -17,10 +17,6 @@ export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLate
   const [notifSaving, setNotifSaving] = useState(false);
   const [notifMsg, setNotifMsg] = useState(null);
   const [showManual, setShowManual] = useState(false);
-  const widgetMountRef = useRef(null);
-  const handlersRef = useRef({ setErr, setNotifMsg, setTgChat });
-  handlersRef.current = { setErr, setNotifMsg, setTgChat };
-
   const loadNotifChannels = useCallback(async () => {
     if (user?.role !== "admin") return;
     setNotifLoading(true);
@@ -50,44 +46,6 @@ export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLate
     loadNotifChannels();
   }, [loadNotifChannels]);
 
-  useEffect(() => {
-    if (notifLoading || !tgWidget.available || !tgWidget.bot_username) return undefined;
-    const el = widgetMountRef.current;
-    if (!el) return undefined;
-
-    const onAuth = async (tgUser) => {
-      const { setErr: se, setNotifMsg: sm, setTgChat: st } = handlersRef.current;
-      try {
-        const data = await apiFetch("/api/v1/settings/telegram-link", {
-          method: "POST",
-          body: JSON.stringify(tgUser),
-        });
-        st(data.telegram_chat_id || "");
-        sm({
-          tone: "ok",
-          text: "Đã liên kết tài khoản Telegram — bạn sẽ nhận thông báo qua bot.",
-        });
-      } catch (err) {
-        se(String(err.message || err));
-      }
-    };
-
-    window.onTelegramAuth = onAuth;
-    el.innerHTML = "";
-    const script = document.createElement("script");
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.async = true;
-    script.setAttribute("data-telegram-login", tgWidget.bot_username);
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-onauth", "onTelegramAuth(user)");
-    script.setAttribute("data-request-access", "write");
-    el.appendChild(script);
-
-    return () => {
-      el.innerHTML = "";
-      if (window.onTelegramAuth === onAuth) delete window.onTelegramAuth;
-    };
-  }, [notifLoading, tgWidget.available, tgWidget.bot_username]);
 
   const saveNotifChannels = async () => {
     setNotifSaving(true);
@@ -131,7 +89,7 @@ export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLate
       }}
     >
       <section style={styles.card}>
-        <h3>Cài đặt hệ thống</h3>
+        <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: 20 }}>Cài đặt hệ thống</h3>
         {user.role === "admin" ? (
           <>
             <p>
@@ -162,7 +120,7 @@ export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLate
 
       {user.role === "admin" && (
         <section style={styles.card}>
-          <h3>Thông báo Telegram</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: 20 }}>Thông báo Telegram</h3>
 
           {tgChat ? (
             <p style={{ fontSize: 14, color: "#166534", marginBottom: 12, lineHeight: 1.5 }}>
@@ -195,10 +153,20 @@ export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLate
                 </p>
               )}
 
-              {tgWidget.available && (
+              {tgWidget.has_bot_token && tgWidget.bot_username && (
                 <div style={{ marginBottom: 16 }}>
                   <p style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Liên kết bằng tài khoản Telegram</p>
-                  <div ref={widgetMountRef} />
+                  <a
+                    href={`https://t.me/${tgWidget.bot_username}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={tgLinkBtn}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff">
+                      <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0h-.056zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                    </svg>
+                    Mở Bot Telegram
+                  </a>
                 </div>
               )}
 
@@ -242,22 +210,14 @@ export default function SettingsTab({ user, syncMeta, runExcelSync, downloadLate
         </section>
       )}
 
-      {user.role === "admin" && typeof onLogout === "function" && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            alignItems: "center",
-            marginTop: "auto",
-            paddingTop: 20,
-            borderTop: "1px solid #e2e8f0",
-          }}
-        >
-          <button type="button" style={{ ...styles.btnGhost, fontWeight: 700 }} onClick={() => onLogout()}>
-            Đăng xuất
-          </button>
-        </div>
-      )}
     </div>
   );
 }
+
+const tgLinkBtn = {
+  display: "inline-flex", alignItems: "center", gap: 10,
+  padding: "10px 20px", borderRadius: 10,
+  background: "#0088cc", color: "#fff",
+  fontSize: 14, fontWeight: 700, textDecoration: "none",
+  cursor: "pointer", transition: "background 0.2s ease",
+};

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+from datetime import date
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -15,17 +16,29 @@ from app.services import report_service
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
+@router.get("/date-range", response_model=MonthlyReportOut)
+async def date_range_report(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    worst_max_days: int = Query(35, ge=1, le=365),
+):
+    return await report_service.date_range_report(
+        db, date_from, date_to, worst_max_days=worst_max_days
+    )
+
+
 @router.get("/monthly", response_model=MonthlyReportOut)
 async def monthly_report(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
     year: int = Query(..., ge=2020, le=2100),
     month: int = Query(..., ge=1, le=12),
-    worst_min_days: int = Query(31, ge=1, le=365),
     worst_max_days: int = Query(35, ge=1, le=365),
 ):
     return await report_service.monthly_report(
-        db, year, month, worst_min_days=worst_min_days, worst_max_days=worst_max_days
+        db, year, month, worst_max_days=worst_max_days
     )
 
 
@@ -35,13 +48,13 @@ async def monthly_report_export_csv(
     _: User = Depends(require_admin),
     year: int = Query(..., ge=2020, le=2100),
     month: int = Query(..., ge=1, le=12),
-    worst_min_days: int = Query(31, ge=1, le=365),
     worst_max_days: int = Query(35, ge=1, le=365),
 ):
     r = await report_service.monthly_report(
-        db, year, month, worst_min_days=worst_min_days, worst_max_days=worst_max_days
+        db, year, month, worst_max_days=worst_max_days
     )
     buf = io.StringIO()
+    buf.write("\ufeff")  # UTF-8 BOM for Excel Vietnamese support
     w = csv.writer(buf)
     w.writerow(
         [
@@ -61,10 +74,10 @@ async def monthly_report_export_csv(
     w.writerow(["assignee", "total_leads", "overdue_leads", "sla_compliance_pct"])
     for row in r.by_sale:
         w.writerow([row.assignee, row.total_leads, row.overdue_leads, row.sla_compliance_pct])
-    data = buf.getvalue()
+    data = buf.getvalue().encode("utf-8-sig")
     fn = f"monthly_report_{year}_{month:02d}.csv"
     return StreamingResponse(
         iter([data]),
-        media_type="text/csv; charset=utf-8",
+        media_type="text/csv; charset=utf-8-sig",
         headers={"Content-Disposition": f'attachment; filename="{fn}"'},
     )

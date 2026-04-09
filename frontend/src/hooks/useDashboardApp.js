@@ -9,6 +9,7 @@ import {
 } from "../api";
 import { LEADS_PAGE_SIZE } from "../constants/leadConstants";
 import { downloadAuthorizedBlob } from "../utils/downloadBlob";
+import { exportReportExcel } from "../utils/exportReportExcel";
 import { normText } from "../utils/normText";
 import { useAppWebSocket } from "./useAppWebSocket";
 
@@ -38,8 +39,10 @@ export function useDashboardApp() {
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [uncontactedOnly, setUncontactedOnly] = useState(false);
   const [callStatusOtherOnly, setCallStatusOtherOnly] = useState(false);
+  const [callStatusGroups, setCallStatusGroups] = useState([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [enrollmentBucket, setEnrollmentBucket] = useState("");
   const [leadsPage, setLeadsPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
 
@@ -48,7 +51,6 @@ export function useDashboardApp() {
   const [report, setReport] = useState(null);
   const [repY, setRepY] = useState(new Date().getFullYear());
   const [repM, setRepM] = useState(new Date().getMonth() + 1);
-  const [worstMinDays, setWorstMinDays] = useState(31);
   const [worstMaxDays, setWorstMaxDays] = useState(35);
   const [newUser, setNewUser] = useState({ username: "", password: "", role: "sale", display_name: "" });
   const [assignPick, setAssignPick] = useState({});
@@ -85,6 +87,7 @@ export function useDashboardApp() {
       callStatusOtherOnlyValue,
       dateFromValue,
       dateToValue,
+      enrollmentBucketValue,
       pageValue,
     } = {}) => {
       const qBase = new URLSearchParams();
@@ -97,6 +100,7 @@ export function useDashboardApp() {
         callStatusOtherOnlyValue ?? callStatusOtherOnly;
       const dateFromFinal = dateFromValue ?? dateFrom;
       const dateToFinal = dateToValue ?? dateTo;
+      const ebFinal = enrollmentBucketValue ?? enrollmentBucket;
       const pageFinal = pageValue ?? leadsPage;
       if (assignedFinal.trim()) qBase.set("assigned_to", assignedFinal.trim());
       if (phoneFinal.trim()) qBase.set("phone", phoneFinal.trim());
@@ -104,13 +108,15 @@ export function useDashboardApp() {
       if (uncontactedOnlyFinal) qBase.set("uncontacted_only", "true");
       if (statusesFinal?.length) qBase.set("statuses", statusesFinal.join(","));
       if (callStatusOtherOnlyFinal) qBase.set("contact_call_statuses", "Khác");
+      if (callStatusGroups.length) qBase.set("call_status_groups", callStatusGroups.join(","));
       if (dateFromFinal) qBase.set("date_from", dateFromFinal);
       if (dateToFinal) qBase.set("date_to", dateToFinal);
+      if (ebFinal) qBase.set("enrollment_bucket", ebFinal);
       qBase.set("page", String(pageFinal));
       qBase.set("limit", String(LEADS_PAGE_SIZE));
       return apiFetch(`/api/v1/leads/query?${qBase}`);
     },
-    [assigned, phone, overdueOnly, uncontactedOnly, statusMulti, callStatusOtherOnly, dateFrom, dateTo, leadsPage]
+    [assigned, phone, overdueOnly, uncontactedOnly, statusMulti, callStatusOtherOnly, callStatusGroups, dateFrom, dateTo, enrollmentBucket, leadsPage]
   );
 
   const load = useCallback(async () => {
@@ -175,13 +181,13 @@ export function useDashboardApp() {
     setErr(null);
     try {
       const r = await apiFetch(
-        `/api/v1/reports/monthly?year=${repY}&month=${repM}&worst_min_days=${worstMinDays}&worst_max_days=${worstMaxDays}`
+        `/api/v1/reports/monthly?year=${repY}&month=${repM}&worst_max_days=${worstMaxDays}`
       );
       setReport(r);
     } catch (x) {
       setErr(String(x.message || x));
     }
-  }, [repY, repM, worstMinDays, worstMaxDays, user]);
+  }, [repY, repM, worstMaxDays, user]);
 
   useEffect(() => {
     setLeadsPage(1);
@@ -194,6 +200,7 @@ export function useDashboardApp() {
     callStatusOtherOnly,
     dateFrom,
     dateTo,
+    enrollmentBucket,
     tab,
   ]);
 
@@ -273,6 +280,7 @@ export function useDashboardApp() {
       setCallStatusOtherOnly(false);
       setDateFrom("");
       setDateTo("");
+      setEnrollmentBucket("");
       setLeadsPage(1);
       let res2 = await fetchLeadDataset({
         assignedValue: "",
@@ -282,6 +290,7 @@ export function useDashboardApp() {
         callStatusOtherOnlyValue: false,
         dateFromValue: "",
         dateToValue: "",
+        enrollmentBucketValue: "",
         pageValue: 1,
       });
       if (res?.queued) {
@@ -298,6 +307,7 @@ export function useDashboardApp() {
             callStatusOtherOnlyValue: false,
             dateFromValue: "",
             dateToValue: "",
+            enrollmentBucketValue: "",
             pageValue: 1,
           });
           if ((next?.total || 0) === lastTotal) stableHits += 1;
@@ -391,6 +401,17 @@ export function useDashboardApp() {
     setErr(null);
     try {
       await apiFetch(`/api/v1/leads/${leadId}/assign`, { method: "PATCH", body: JSON.stringify({ username }) });
+      await load();
+    } catch (x) {
+      setErr(String(x.message || x));
+    }
+  }
+
+  async function deleteLead(leadId) {
+    setErr(null);
+    try {
+      await apiFetch(`/api/v1/leads/${leadId}`, { method: "DELETE" });
+      setActiveLeadId(null);
       await load();
     } catch (x) {
       setErr(String(x.message || x));
@@ -551,10 +572,55 @@ export function useDashboardApp() {
   }
 
   async function downloadReportExport() {
-    await downloadAuthorizedBlob(
-      `/api/v1/reports/monthly/export?year=${repY}&month=${repM}&worst_min_days=${worstMinDays}&worst_max_days=${worstMaxDays}`,
-      `monthly_report_${repY}_${String(repM).padStart(2, "0")}.csv`
-    );
+    if (!report) throw new Error("Chưa có dữ liệu báo cáo. Hãy nhấn Áp dụng trước.");
+    const slaData = (report.by_sale || [])
+      .filter((s) => s.assignee !== "Chưa gán")
+      .map((s) => ({
+        name: s.assignee,
+        leads: s.total_leads,
+        lateLeads: s.overdue_leads,
+        slaRate: `${s.sla_compliance_pct}%`,
+        slaNum: s.sla_compliance_pct,
+      }));
+    const conversionData = (report.conversion_by_assignee || [])
+      .filter((c) => c.assignee !== "Chưa gán")
+      .map((c) => ({
+        name: c.assignee,
+        totalLeads: c.total_leads,
+        reg: c.reg_count,
+        nb: c.nb_count,
+        ne: c.ne_count,
+      }));
+    const statusBreakdown = (report.status_breakdown || [])
+      .filter((r) => r.assignee !== "Chưa gán")
+      .map((r) => ({
+        name: r.assignee,
+        branch: r.branch,
+        quanTam: r.quan_tam,
+        suyNghiThem: r.suy_nghi_them,
+        tiemNang: r.tiem_nang,
+        khongQuanTam: r.khong_quan_tam,
+        khongPhuHop: r.khong_phu_hop,
+        chuaCapNhat: r.chua_cap_nhat,
+      }));
+    const dateFrom = `01/${String(repM).padStart(2, "0")}/${repY}`;
+    const lastDay = new Date(repY, repM, 0).getDate();
+    const dateTo = `${lastDay}/${String(repM).padStart(2, "0")}/${repY}`;
+    await exportReportExcel({ slaData, conversionData, statusBreakdown, dateFrom, dateTo });
+  }
+
+  async function downloadReportExportTotal() {
+    const r = await apiFetch(`/api/v1/reports/date-range?date_from=2020-01-01&date_to=2099-12-31&worst_max_days=${worstMaxDays}`);
+    const slaData = (r.by_sale || [])
+      .filter((s) => s.assignee !== "Chưa gán")
+      .map((s) => ({ name: s.assignee, leads: s.total_leads, lateLeads: s.overdue_leads, slaRate: `${s.sla_compliance_pct}%`, slaNum: s.sla_compliance_pct }));
+    const conversionData = (r.conversion_by_assignee || [])
+      .filter((c) => c.assignee !== "Chưa gán")
+      .map((c) => ({ name: c.assignee, totalLeads: c.total_leads, reg: c.reg_count, nb: c.nb_count, ne: c.ne_count }));
+    const statusBreakdown = (r.status_breakdown || [])
+      .filter((s) => s.assignee !== "Chưa gán")
+      .map((s) => ({ name: s.assignee, branch: s.branch, quanTam: s.quan_tam, suyNghiThem: s.suy_nghi_them, tiemNang: s.tiem_nang, khongQuanTam: s.khong_quan_tam, khongPhuHop: s.khong_phu_hop, chuaCapNhat: s.chua_cap_nhat }));
+    await exportReportExcel({ slaData, conversionData, statusBreakdown, dateFrom: "Toàn bộ", dateTo: "dữ liệu" });
   }
 
   async function downloadLatestSync() {
@@ -591,6 +657,10 @@ export function useDashboardApp() {
     setStatusMulti((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   }
 
+  function toggleCallStatusGroup(g) {
+    setCallStatusGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+  }
+
   function toggleSelect(id, checked) {
     setSelected((prev) => ({ ...prev, [id]: checked }));
   }
@@ -619,6 +689,7 @@ export function useDashboardApp() {
       if (bulkOnlyUncontacted) qBase.set("uncontacted_only", "true");
       if (statusMulti?.length) qBase.set("statuses", statusMulti.join(","));
       if (callStatusOtherOnly) qBase.set("contact_call_statuses", "Khác");
+      if (callStatusGroups.length) qBase.set("call_status_groups", callStatusGroups.join(","));
       if (dateFrom) qBase.set("date_from", dateFrom);
       if (dateTo) qBase.set("date_to", dateTo);
       const res = await apiFetch(`/api/v1/leads/query-ids?${qBase}`);
@@ -784,6 +855,8 @@ export function useDashboardApp() {
     setDateFrom,
     dateTo,
     setDateTo,
+    enrollmentBucket,
+    setEnrollmentBucket,
     leadsPage,
     setLeadsPage,
     pageInput,
@@ -795,8 +868,6 @@ export function useDashboardApp() {
     setRepY,
     repM,
     setRepM,
-    worstMinDays,
-    setWorstMinDays,
     worstMaxDays,
     setWorstMaxDays,
     newUser,
@@ -832,6 +903,7 @@ export function useDashboardApp() {
     createUser,
     doAssign,
     markContacted,
+    deleteLead,
     saveNotes,
     appendNote,
     updateLeadStatus,
@@ -840,9 +912,12 @@ export function useDashboardApp() {
     runBulkAction,
     runExcelSync,
     downloadReportExport,
+    downloadReportExportTotal,
     downloadLatestSync,
     logout,
     toggleStatus,
+    callStatusGroups,
+    toggleCallStatusGroup,
     toggleSelect,
     toggleSelectAllCurrentPage,
     selectAllByCurrentFilter,

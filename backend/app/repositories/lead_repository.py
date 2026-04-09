@@ -23,6 +23,14 @@ class LeadRepository:
     async def get_by_id(self, db: AsyncSession, lead_id: UUID) -> Optional[Lead]:
         return await db.get(Lead, lead_id)
 
+    async def delete(self, db: AsyncSession, lead_id: UUID) -> bool:
+        lead = await db.get(Lead, lead_id)
+        if not lead:
+            return False
+        await db.delete(lead)
+        await db.flush()
+        return True
+
     async def get_by_phone(self, db: AsyncSession, phone: str) -> Optional[Lead]:
         q = select(Lead).where(Lead.phone == phone).limit(1)
         return (await db.execute(q)).scalar_one_or_none()
@@ -59,7 +67,14 @@ class LeadRepository:
             q = q.where(Lead.status == status)
         if phone_search:
             pat = f"%{phone_search}%"
-            q = q.where(or_(Lead.phone.ilike(pat), Lead.phone_secondary.ilike(pat)))
+            # Only filter phone fields at SQL level; name/id filtering done in service layer
+            digits_only = phone_search.strip().replace(" ", "")
+            if digits_only.isdigit():
+                q = q.where(or_(
+                    Lead.phone.ilike(pat),
+                    Lead.phone_secondary.ilike(pat),
+                    Lead.external_id.ilike(pat),
+                ))
         if overdue_only:
             q = q.where(Lead.last_contact_at.is_(None))
 

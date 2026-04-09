@@ -37,13 +37,14 @@ async def export_leads_csv(
 ):
     rows = await lead_service.export_leads_csv_rows(db, user)
     buf = io.StringIO()
+    buf.write("\ufeff")  # UTF-8 BOM for Excel Vietnamese support
     w = csv.writer(buf)
     for r in rows:
         w.writerow(r)
-    data = buf.getvalue()
+    data = buf.getvalue().encode("utf-8-sig")
     return StreamingResponse(
         iter([data]),
-        media_type="text/csv; charset=utf-8",
+        media_type="text/csv; charset=utf-8-sig",
         headers={
             "Content-Disposition": 'attachment; filename="leads_export.csv"',
         },
@@ -82,13 +83,14 @@ async def bulk_export_csv(
 ):
     rows = await lead_service.bulk_export_csv_rows(db, actor=user, body=body)
     buf = io.StringIO()
+    buf.write("\ufeff")  # UTF-8 BOM for Excel Vietnamese support
     w = csv.writer(buf)
     for r in rows:
         w.writerow(r)
-    data = buf.getvalue()
+    data = buf.getvalue().encode("utf-8-sig")
     return StreamingResponse(
         iter([data]),
-        media_type="text/csv; charset=utf-8",
+        media_type="text/csv; charset=utf-8-sig",
         headers={
             "Content-Disposition": 'attachment; filename="selected_leads_export.csv"',
         },
@@ -103,8 +105,10 @@ async def query_leads(
     uncontacted_only: bool = False,
     statuses: Optional[str] = None,
     contact_call_statuses: Optional[str] = None,
+    call_status_groups: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    enrollment_bucket: Optional[str] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -113,6 +117,9 @@ async def query_leads(
     status_list = [s.strip() for s in statuses.split(",")] if statuses else None
     ccs_list = (
         [s.strip() for s in contact_call_statuses.split("|") if s.strip()] if contact_call_statuses else None
+    )
+    csg_list = (
+        [s.strip() for s in call_status_groups.split(",") if s.strip()] if call_status_groups else None
     )
     return await lead_service.query_leads_page(
         db,
@@ -123,8 +130,10 @@ async def query_leads(
         uncontacted_only=uncontacted_only,
         statuses=status_list,
         contact_call_statuses=ccs_list,
+        call_status_groups=csg_list,
         date_from=date_from,
         date_to=date_to,
+        enrollment_bucket=enrollment_bucket or None,
         page=page,
         limit=limit,
     )
@@ -138,6 +147,7 @@ async def query_lead_ids(
     uncontacted_only: bool = False,
     statuses: Optional[str] = None,
     contact_call_statuses: Optional[str] = None,
+    call_status_groups: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     db: AsyncSession = Depends(get_db),
@@ -146,6 +156,9 @@ async def query_lead_ids(
     status_list = [s.strip() for s in statuses.split(",")] if statuses else None
     ccs_list = (
         [s.strip() for s in contact_call_statuses.split("|") if s.strip()] if contact_call_statuses else None
+    )
+    csg_list = (
+        [s.strip() for s in call_status_groups.split(",") if s.strip()] if call_status_groups else None
     )
     ids = await lead_service.query_lead_ids(
         db,
@@ -156,6 +169,7 @@ async def query_lead_ids(
         uncontacted_only=uncontacted_only,
         statuses=status_list,
         contact_call_statuses=ccs_list,
+        call_status_groups=csg_list,
         date_from=date_from,
         date_to=date_to,
     )
@@ -244,6 +258,18 @@ async def patch_lead(
     await cache_service.cache_delete("dash:")
     await db.refresh(lead)
     return await lead_to_lead_out(db, lead)
+
+
+@router.delete("/{lead_id}")
+async def delete_lead(
+    lead_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    await lead_service.delete_lead(db, lead_id, user)
+    await db.commit()
+    await cache_service.cache_delete("dash:")
+    return {"deleted": True}
 
 
 @router.get("/{lead_id}", response_model=LeadOut)

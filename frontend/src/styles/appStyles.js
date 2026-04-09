@@ -1,64 +1,107 @@
 export const styles = {
-  shell: { display: "flex", minHeight: "100vh", background: "linear-gradient(180deg, #f0f9ff 0%, #f8fafc 40%, #fff7ed 100%)" },
+  shell: { display: "flex", minHeight: "100vh", background: "#f1f5f9", overflow: "hidden" },
   sidebar: {
-    width: 340,
+    width: 280,
+    minWidth: 280,
     background: "linear-gradient(180deg, #0a1628 0%, #0f2137 48%, #0a1628 100%)",
     color: "#e2e8f0",
-    padding: 16,
+    padding: 14,
     display: "flex",
     flexDirection: "column",
     gap: 8,
     boxShadow: "8px 0 30px rgba(10,22,40,0.35)",
+    position: "relative",
+    overflow: "hidden",
   },
-  navItem: { textAlign: "left", padding: "10px 12px", borderRadius: 8, border: "none", background: "transparent", color: "#cbd5e1", cursor: "pointer", fontWeight: 600 },
+  navItem: { textAlign: "left", padding: "10px 12px", borderRadius: 10, border: "none", background: "transparent", color: "#cbd5e1", cursor: "pointer", fontWeight: 600, transition: "all 0.2s ease" },
   navItemActive: {
     background: "linear-gradient(90deg, #ea580c 0%, #F37021 55%, #fb923c 100%)",
     color: "#fff",
-    boxShadow: "inset 3px 0 0 0 #00A651, 0 4px 16px rgba(243,112,33,0.38)",
+    boxShadow: "0 4px 20px rgba(243,112,33,0.4)",
   },
-  main: { flex: 1, padding: 18 },
+  main: { flex: 1, padding: "0 24px 16px", overflow: "auto", marginLeft: 356, height: "100vh", background: "#f1f5f9" },
   topbar: {
-    background: "rgba(255,255,255,0.72)",
-    border: "1px solid rgba(148,163,184,0.28)",
-    backdropFilter: "blur(8px)",
-    borderRadius: 14,
-    padding: 12,
+    background: "rgba(255,255,255,0.95)",
+    border: "1px solid rgba(226,232,240,0.8)",
+    backdropFilter: "blur(12px)",
+    borderRadius: 16,
+    padding: "12px 16px",
     display: "flex",
     alignItems: "center",
     gap: 10,
     flexWrap: "wrap",
     marginBottom: 12,
-    boxShadow: "0 8px 22px rgba(15,23,42,0.08)",
+    boxShadow: "0 4px 20px rgba(15,23,42,0.06)",
   },
-  kpiGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 12 },
-  kpiCard: { background: "#fff", borderRadius: 10, padding: 12, boxShadow: "0 1px 3px rgba(15,23,42,0.08)" },
-  card: { background: "#fff", borderRadius: 12, padding: 14, boxShadow: "0 1px 3px rgba(15,23,42,0.08)", marginBottom: 12 },
+  kpiGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 14 },
+  kpiCard: {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    boxShadow: "0 1px 3px rgba(15,23,42,0.06)",
+    border: "1px solid #f1f5f9",
+    transition: "all 0.35s cubic-bezier(0.22,1,0.36,1)",
+    cursor: "default",
+    position: "relative",
+    overflow: "hidden",
+  },
+  card: {
+    background: "rgba(255,255,255,0.95)",
+    backdropFilter: "blur(8px)",
+    borderRadius: 16,
+    padding: 18,
+    boxShadow: "0 1px 4px rgba(15,23,42,0.05), 0 4px 16px rgba(15,23,42,0.02)",
+    border: "1px solid rgba(226,232,240,0.7)",
+    marginBottom: 12,
+    animation: "cardEntrance 0.4s ease-out both",
+    transition: "box-shadow 0.3s ease",
+  },
   split: { display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" },
   filters: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 },
-  input: { padding: "8px 10px", borderRadius: 8, border: "1px solid #cbd5e1", minWidth: 120 },
-  btn: { padding: "8px 12px", borderRadius: 8, border: "none", background: "#334155", color: "#fff", cursor: "pointer", fontWeight: 700 },
-  btnPrimary: { padding: "8px 12px", borderRadius: 8, border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 },
-  btnGhost: { padding: "8px 12px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer" },
-  btnSm: { padding: "4px 8px", borderRadius: 6, border: "none", background: "#475569", color: "#fff", cursor: "pointer", fontSize: 12, marginRight: 4 },
+  input: { padding: "9px 12px", borderRadius: 10, border: "1px solid #e2e8f0", minWidth: 130, fontSize: 13, transition: "border-color 0.2s ease, box-shadow 0.2s ease", outline: "none", background: "#fff" },
+  btn: { padding: "9px 14px", borderRadius: 10, border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: 13, transition: "all 0.2s ease" },
+  btnPrimary: { padding: "9px 14px", borderRadius: 10, border: "none", background: "#f97316", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: 13, transition: "all 0.2s ease" },
+  btnGhost: { padding: "9px 14px", borderRadius: 10, border: "1px solid #e2e8f0", background: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "#475569", transition: "all 0.2s ease" },
+  btnSm: { padding: "4px 8px", borderRadius: 6, border: "none", background: "#475569", color: "#fff", cursor: "pointer", fontSize: 12, marginRight: 4, transition: "all 0.2s ease" },
   badge: { padding: "4px 8px", borderRadius: 999, background: "#e2e8f0", color: "#334155", fontWeight: 700, fontSize: 12 },
-  chk: { fontSize: 13, color: "#475569", display: "flex", alignItems: "center", gap: 4 },
+  chk: { fontSize: 13, color: "#475569", display: "flex", alignItems: "center", gap: 6 },
   tableScroll: { overflowX: "auto" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
-  th: { textAlign: "left", borderBottom: "2px solid #e2e8f0", padding: "8px 6px", color: "#64748b" },
-  td: { borderBottom: "1px solid #f1f5f9", padding: "8px 6px", verticalAlign: "top" },
-  error: { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", borderRadius: 8, padding: "8px 12px", marginBottom: 10 },
-  banner: { background: "#fff7ed", border: "1px solid #fdba74", color: "#9a3412", borderRadius: 10, padding: "10px 12px", marginBottom: 12 },
-  linkBtn: { border: "none", background: "transparent", color: "#1d4ed8", textDecoration: "underline", cursor: "pointer", fontWeight: 700 },
-  dashboardCharts: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14, alignItems: "stretch" },
-  chartCard: { border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)", minHeight: 250 },
-  chartTitle: { fontSize: 14, fontWeight: 700, color: "#334155", marginBottom: 10 },
-  chartBody: { height: 210, display: "flex", alignItems: "center", justifyContent: "center" },
-  barChartWrap: { display: "flex", gap: 12, alignItems: "flex-end", minHeight: 180, width: "100%", justifyContent: "space-between" },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
+  th: { textAlign: "left", borderBottom: "2px solid #f1f5f9", padding: "10px 10px", color: "#94a3b8", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" },
+  td: { borderBottom: "1px solid #f8fafc", padding: "10px 10px", verticalAlign: "middle", fontSize: 13 },
+  error: { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", borderRadius: 12, padding: "10px 14px", marginBottom: 10, animation: "fadeInUp 0.3s ease-out" },
+  banner: { background: "#fff7ed", border: "1px solid #fdba74", color: "#9a3412", borderRadius: 12, padding: "12px 14px", marginBottom: 12, animation: "fadeInUp 0.3s ease-out" },
+  linkBtn: { border: "none", background: "transparent", color: "#f97316", textDecoration: "underline", cursor: "pointer", fontWeight: 700 },
+  dashboardCharts: { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, alignItems: "stretch" },
+  chartCard: {
+    border: "1px solid #f1f5f9",
+    borderRadius: 16,
+    padding: 16,
+    background: "#fff",
+    minHeight: 250,
+    transition: "box-shadow 0.35s cubic-bezier(0.22,1,0.36,1), transform 0.35s cubic-bezier(0.22,1,0.36,1)",
+    overflow: "hidden",
+    minWidth: 0,
+    animation: "cardEntrance 0.5s ease-out both",
+  },
+  chartTitle: { fontSize: 14, fontWeight: 700, color: "#0f172a", marginBottom: 10 },
+  chartBody: { height: 210, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", width: "100%" },
+  barChartWrap: { display: "flex", gap: 6, alignItems: "flex-end", minHeight: 180, width: "100%", justifyContent: "space-between" },
   trendCol: { display: "flex", flexDirection: "column", alignItems: "center", gap: 6 },
-  trendBar: { width: 24, background: "#c7d2fe", borderRadius: 6 },
+  trendBar: { width: 24, background: "#f97316", borderRadius: "4px 4px 0 0", transition: "height 0.8s cubic-bezier(0.22,1,0.36,1)" },
   legendRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 13, color: "#334155" },
   legendDot: { width: 12, height: 12, borderRadius: 999, display: "inline-block" },
-  toast: { background: "#0f172a", color: "#fff", padding: "8px 10px", borderRadius: 8, marginBottom: 8, maxWidth: 320, fontSize: 13 },
+  toast: {
+    background: "#0f172a",
+    color: "#fff",
+    padding: "10px 14px",
+    borderRadius: 12,
+    marginBottom: 8,
+    maxWidth: 340,
+    fontSize: 13,
+    boxShadow: "0 8px 24px rgba(15,23,42,0.2)",
+    animation: "fadeInRight 0.4s cubic-bezier(0.22,1,0.36,1)",
+  },
 };
 
 export function toneColor(tone) {
@@ -66,17 +109,17 @@ export function toneColor(tone) {
 }
 
 export function barColor(ratio) {
-  if (ratio > 0.8) return "#6366f1";
-  if (ratio > 0.55) return "#818cf8";
-  if (ratio > 0.3) return "#a5b4fc";
-  return "#c7d2fe";
+  if (ratio > 0.8) return "#f97316";
+  if (ratio > 0.55) return "#fb923c";
+  if (ratio > 0.3) return "#fdba74";
+  return "#fed7aa";
 }
 
 export function badge(status) {
-  const base = { padding: "2px 8px", borderRadius: 999, fontSize: 12, fontWeight: 700, textTransform: "uppercase" };
-  if (status === "late") return { ...base, background: "#fee2e2", color: "#991b1b" };
-  if (status === "active") return { ...base, background: "#dcfce7", color: "#166534" };
-  if (status === "contacting") return { ...base, background: "#dbeafe", color: "#1e40af" };
-  if (status === "closed") return { ...base, background: "#f3f4f6", color: "#374151" };
-  return { ...base, background: "#fef3c7", color: "#92400e" };
+  const base = { padding: "3px 10px", borderRadius: 6, fontSize: 12, fontWeight: 700, letterSpacing: "0.02em" };
+  if (status === "late") return { ...base, background: "#fef2f2", color: "#991b1b" };
+  if (status === "active") return { ...base, background: "#f0fdf4", color: "#166534" };
+  if (status === "contacting") return { ...base, background: "#eff6ff", color: "#1e40af" };
+  if (status === "closed") return { ...base, background: "#f8fafc", color: "#64748b" };
+  return { ...base, background: "#fff7ed", color: "#ea580c" };
 }

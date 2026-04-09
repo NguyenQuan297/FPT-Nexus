@@ -1,7 +1,16 @@
 from __future__ import annotations
 
+import unicodedata
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
+
+
+def _remove_accents(s: str) -> str:
+    """Remove Vietnamese diacritics for accent-insensitive search."""
+    # Normalize to NFD (decomposed form), then strip combining marks
+    nfkd = unicodedata.normalize("NFD", s)
+    return "".join(c for c in nfkd if unicodedata.category(c) != "Mn").lower()
+    # Mn = Mark, Nonspacing (accents, tone marks, etc.)
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -80,8 +89,10 @@ async def query_leads_page(
     uncontacted_only: bool = False,
     statuses: Optional[List[str]] = None,
     contact_call_statuses: Optional[List[str]] = None,
+    call_status_groups: Optional[List[str]] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    enrollment_bucket: Optional[str] = None,
     page: int = 1,
     limit: int = 20,
 ) -> LeadQueryResponse:
@@ -101,6 +112,19 @@ async def query_leads_page(
         limit=100000,
         offset=0,
     )
+
+    # Text search (non-digit): filter by name, external_id, phone in Python
+    # Uses accent-insensitive matching so "khanh" matches "Khánh"
+    search_q = (phone_search or "").strip()
+    if search_q and not search_q.replace(" ", "").isdigit():
+        sq = _remove_accents(search_q)
+        rows = [
+            r for r in rows
+            if sq in _remove_accents(r.name or "")
+            or sq in _remove_accents(r.external_id or "")
+            or sq in (r.phone or "").lower()
+            or sq in _remove_accents(r.assigned_to or "")
+        ]
 
     if assignee_query:
         usernames = {(r.assigned_to or "").strip() for r in rows if (r.assigned_to or "").strip()}
@@ -128,6 +152,50 @@ async def query_leads_page(
 
     rows = filter_leads_by_contact_call_status_labels(rows, contact_call_statuses)
 
+    if call_status_groups:
+        from app.core.call_status import lead_extra_call_status_label, norm_call_label as _ncl
+        _NO_CONTACT = {"", _ncl("Chưa gọi"), _ncl("Chưa liên hệ")}
+        _CONTACTING = {
+            _ncl(x) for x in (
+                "Chưa nghe máy lần 1", "Chưa nghe máy lần 2", "Chưa nghe máy lần 3",
+                "Gọi lại sau", "Thuê bao", "Máy bận",
+                "Đã gọi - Không nghe máy", "Đã gọi - Thuê bao", "Đã gọi - Bận",
+                "Đã gọi - Hẹn gọi lại", "Đã gọi - Nhầm máy",
+            )
+        }
+        _CONTACTED = {
+            _ncl(x) for x in (
+                "Đã nghe máy",
+                "Đã gọi - Quan tâm", "Đã gọi - Tiềm năng", "Đã gọi - Suy nghĩ thêm", "Đã gọi - Không quan tâm",
+                "Đã gọi - Đã chốt", "Đã gọi - Đã gửi mail", "Đã gọi - Đã gửi zalo",
+                "Đã gọi - Đã gửi báo giá", "Đã gọi - Đã gửi hợp đồng",
+                "Đã gọi - Đã thanh toán", "Đã gọi - Đã hoàn thành",
+            )
+        }
+        groups = {g.strip() for g in call_status_groups if g.strip()}
+        filtered = []
+        for r in rows:
+            ex = getattr(r, "extra", None)
+            lbl = _ncl(lead_extra_call_status_label(ex if isinstance(ex, dict) else None))
+            if "chua_lien_he" in groups and (lbl in _NO_CONTACT or r.status == "new"):
+                filtered.append(r); continue
+            if "dang_lien_he" in groups and lbl in _CONTACTING:
+                filtered.append(r); continue
+            if "da_lien_he" in groups and lbl in _CONTACTED:
+                filtered.append(r); continue
+            if "khac" in groups and lbl not in _NO_CONTACT and lbl not in _CONTACTING and lbl not in _CONTACTED:
+                filtered.append(r); continue
+        rows = filtered
+        if "chua_lien_he" in groups:
+            _chua_lien_he_label = _ncl("Chưa liên hệ")
+            rows.sort(
+                key=lambda r: (
+                    0 if _ncl(lead_extra_call_status_label(
+                        r.extra if isinstance(r.extra, dict) else None
+                    )) == _chua_lien_he_label else 1
+                )
+            )
+
     if date_from:
         start_dt = datetime.combine(date_from, datetime.min.time(), tzinfo=timezone.utc)
         rows = [
@@ -145,6 +213,20 @@ async def query_leads_page(
 
     if uncontacted_only:
         rows = [r for r in rows if r.last_contact_at is None and r.status != "closed"]
+
+    # Filter by enrollment bucket (NKR / REG / NB / NE) from Excel extra field
+    if enrollment_bucket:
+        eb = enrollment_bucket.strip().upper()
+        if eb in ("REG", "NB", "NE"):
+            rows = [
+                r for r in rows
+                if _normalize_enrollment_bucket((r.extra or {}).get("Tình trạng nhập học")) == eb
+            ]
+        elif eb == "NKR":
+            rows = [
+                r for r in rows
+                if _normalize_enrollment_bucket((r.extra or {}).get("Tình trạng nhập học")) is None
+            ]
 
     total = len(rows)
     page = max(1, page)

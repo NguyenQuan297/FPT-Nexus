@@ -38,7 +38,7 @@ export default function SalesHomeTab({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <section style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>Trang chủ — KPI của bạn</h3>
+        <h3 style={{ marginTop: 0, marginBottom: 6, fontSize: 20 }}>Trang chủ — KPI của bạn</h3>
         <div style={styles.kpiGrid}>
           <div style={styles.kpiCard}>
             <div style={{ fontSize: 12, color: "#64748b" }}>Lead của tôi</div>
@@ -74,7 +74,7 @@ export default function SalesHomeTab({
       </section>
 
       <section style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>Ưu tiên xử lý (quá hạn)</h3>
+        <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: 20 }}>Ưu tiên xử lý (quá hạn)</h3>
         {priority.length === 0 ? (
           <p style={{ color: "#64748b" }}>Không có lead quá hạn trong danh sách — tốt lắm.</p>
         ) : (
@@ -91,7 +91,7 @@ export default function SalesHomeTab({
       </section>
 
       <section style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>Gợi ý việc hôm nay</h3>
+        <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: 20 }}>Gợi ý việc hôm nay</h3>
         <ul style={{ margin: 0, paddingLeft: 18, color: "#475569" }}>
           <li>Gọi / nhắn các lead chưa liên hệ ({uncontacted}).</li>
           <li>Xử lý trước các lead quá hạn SLA ({overdue}).</li>
@@ -100,7 +100,7 @@ export default function SalesHomeTab({
       </section>
 
       <section style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>Xu hướng 7 ngày</h3>
+        <h3 style={{ marginTop: 0, marginBottom: 6, fontSize: 20 }}>Xu hướng 7 ngày</h3>
         <p style={{ marginTop: -6, marginBottom: 10, fontSize: 12, color: "#64748b" }}>
           Bấm vào biểu đồ để phóng to; đưa chuột lên cột hoặc đường để xem số liệu.
         </p>
@@ -113,7 +113,7 @@ export default function SalesHomeTab({
                     data={trend7}
                     progress={chartProgress}
                     zoomed={z}
-                    formatTooltipValue={(d) => `Số lead mới: ${d.value}`}
+
                   />
                 </div>
               )}

@@ -19,25 +19,49 @@ export const TIMEOUT_SYNC_MS = 300000;
 export const TIMEOUT_BULK_MS = 180000;
 
 const IS_DEV = import.meta.env.DEV;
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/+$/, "");
+const RAW_API_BASE = String(import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_BASE_URL || "").trim();
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
-function _joinApiUrl(path) {
-  if (/^https?:\/\//i.test(path)) return path;
-  if (API_BASE_URL) return `${API_BASE_URL}${path}`;
-  return path;
+function isLocalHost(hostname) {
+  return LOCAL_HOSTS.has(String(hostname || "").toLowerCase());
 }
 
-function _ec2FallbackApiUrl(path) {
-  if (typeof window === "undefined") return null;
-  if (!String(path || "").startsWith("/api/")) return null;
-  if (API_BASE_URL) return null;
-  const { protocol, hostname, port } = window.location;
-  if (!hostname) return null;
-  // If app is not served from :8000, try API on same host port 8000.
-  if (port === "8000") return null;
-  // Avoid forcing an http fallback from https static hosting.
-  if (protocol === "https:") return null;
-  return `http://${hostname}:8000${path}`;
+function resolveApiBase() {
+  if (!RAW_API_BASE || typeof window === "undefined") return "";
+  try {
+    const cfg = new URL(RAW_API_BASE);
+    const current = window.location;
+    // Guard against stale prod builds configured with localhost API.
+    if (!isLocalHost(current.hostname) && isLocalHost(cfg.hostname)) {
+      return current.origin;
+    }
+    return `${cfg.protocol}//${cfg.host}`;
+  } catch {
+    return "";
+  }
+}
+
+const API_BASE = resolveApiBase();
+
+function resolveApiUrl(path) {
+  const raw = String(path || "");
+  if (!raw) return raw;
+  if (!API_BASE) return raw;
+  // Absolute URLs are only rewritten when they incorrectly point to localhost
+  // while the app is running on a remote host.
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const u = new URL(raw);
+      if (typeof window !== "undefined" && !isLocalHost(window.location.hostname) && isLocalHost(u.hostname)) {
+        return `${window.location.origin}${u.pathname}${u.search}${u.hash}`;
+      }
+    } catch {
+      // keep original if malformed
+    }
+    return raw;
+  }
+  if (raw.startsWith("/")) return `${API_BASE}${raw}`;
+  return `${API_BASE}/${raw}`;
 }
 
 export async function apiFetch(path, opts = {}) {
@@ -55,49 +79,8 @@ export async function apiFetch(path, opts = {}) {
   const tid = setTimeout(() => ctrl.abort(), timeoutMs);
   let r;
   try {
-    const url = _joinApiUrl(path);
-    r = await fetch(url, { ...fetchOpts, headers, signal: ctrl.signal });
+    r = await fetch(resolveApiUrl(path), { ...fetchOpts, headers, signal: ctrl.signal });
   } catch (e) {
-    if (e instanceof TypeError && String(e.message).includes("fetch")) {
-      const fallbackUrl = _ec2FallbackApiUrl(path);
-      if (fallbackUrl) {
-        try {
-          r = await fetch(fallbackUrl, { ...fetchOpts, headers, signal: ctrl.signal });
-        } catch {
-          // Keep original network error handling below.
-        }
-      }
-    }
-    if (r) {
-      clearTimeout(tid);
-      if (r.status === 401) {
-        if (!path.includes("/auth/login")) setToken(null);
-        let msg = "Unauthorized";
-        try {
-          const ct = r.headers.get("content-type");
-          if (ct && ct.includes("application/json")) {
-            const j = await r.json();
-            if (j.detail != null) {
-              msg = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
-            }
-          } else {
-            const txt = await r.text();
-            if (txt) msg = txt;
-          }
-        } catch {
-          // keep default msg
-        }
-        throw new Error(msg);
-      }
-      if (!r.ok) {
-        const txt = await r.text();
-        throw new Error(txt || r.statusText);
-      }
-      if (r.status === 204) return null;
-      const ct = r.headers.get("content-type");
-      if (ct && ct.includes("application/json")) return r.json();
-      return r.text();
-    }
     if (e.name === "AbortError") {
       throw new Error(
         IS_DEV

@@ -19,6 +19,7 @@ export const CALL_STATUS_OPTIONS = [
   "Đã gọi - Không quan tâm",
   "Đã gọi - Quan tâm",
   "Đã gọi - Tiềm năng",
+  "Đã gọi - Suy nghĩ thêm",
   "Đã gọi - Đã chốt",
   "Đã gọi - Đã gửi mail",
   "Đã gọi - Đã gửi zalo",
