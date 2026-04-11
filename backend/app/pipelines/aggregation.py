@@ -6,6 +6,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.call_status import lead_extra_call_status_label, norm_call_label
 from app.core.constants import (
     LEAD_STATUS_ACTIVE,
     LEAD_STATUS_CONTACTING,
@@ -45,9 +46,6 @@ async def build_dashboard_stats(
     total = await repo.count_total(
         db, assigned_to=assigned_to, sale_username=sale_username
     )
-    uncontacted = await repo.count_uncontacted(
-        db, assigned_to=assigned_to, sale_username=sale_username
-    )
     active_leads = await repo.count_by_status(
         db,
         LEAD_STATUS_ACTIVE,
@@ -60,9 +58,6 @@ async def build_dashboard_stats(
         assigned_to=assigned_to,
         sale_username=sale_username,
     )
-    overdue = await repo.count_overdue_uncontacted(
-        db, assigned_to=assigned_to, sale_username=sale_username
-    )
     all_rows = await repo.list_leads(
         db,
         assigned_to=assigned_to,
@@ -74,17 +69,32 @@ async def build_dashboard_stats(
         offset=0,
     )
     now = datetime.now(timezone.utc)
+    _NO_CONTACT_SET = {"", norm_call_label("Chưa gọi"), norm_call_label("Chưa liên hệ")}
+
+    def _is_uncontacted(r) -> bool:
+        if r.status == "closed":
+            return False
+        ex = getattr(r, "extra", None)
+        lbl = norm_call_label(lead_extra_call_status_label(ex if isinstance(ex, dict) else None))
+        return lbl in _NO_CONTACT_SET or r.status == "new"
+
+    from app.services.sla_service import sla_deadline
+
+    uncontacted = sum(1 for r in all_rows if _is_uncontacted(r))
     at_risk = 0
+    overdue = 0
     reg_count = 0
     for r in all_rows:
         if _normalize_enrollment_bucket((r.extra or {}).get("Tình trạng nhập học")) == "REG":
             reg_count += 1
-        if r.status == "closed" or r.last_contact_at is not None:
+        if r.status == "closed" or not _is_uncontacted(r):
             continue
         created = r.created_at if r.created_at.tzinfo else r.created_at.replace(tzinfo=timezone.utc)
         age_h = (now - created).total_seconds() / 3600
         if 12 <= age_h < 16:
             at_risk += 1
+        if sla_deadline(created, r.sla_hours_at_ingest) < now:
+            overdue += 1
     conversion_reg_pct = round((reg_count / total) * 100.0, 2) if total else 0.0
     late = await repo.count_by_status(
         db,

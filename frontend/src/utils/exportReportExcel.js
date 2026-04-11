@@ -443,10 +443,107 @@ function buildStatusBreakdownSheet(wb, data, dateFrom, dateTo) {
   ws.views = [{ state: "frozen", xSplit: 0, ySplit: 3 }];
 }
 
+// ── Sheet 5: Tình trạng nghe máy ───────────────────────────────────────────
+function buildCallStatusSheet(wb, data, dateFrom, dateTo) {
+  const ws = wb.addWorksheet("Tình trạng nghe máy", { properties: { tabColor: { argb: "FFEF4444" } } });
+
+  const cols = [
+    { key: "name", label: "Nhân sự", width: 30 },
+    { key: "chua_goi", label: "Chưa gọi", width: 12 },
+    { key: "chua_lien_he", label: "Chưa liên hệ", width: 14 },
+    { key: "da_nghe_may", label: "Đã nghe máy", width: 14 },
+    { key: "chua_nghe_may_1", label: "Chưa nghe máy L1", width: 16 },
+    { key: "chua_nghe_may_2", label: "Chưa nghe máy L2", width: 16 },
+    { key: "chua_nghe_may_3", label: "Chưa nghe máy L3", width: 16 },
+    { key: "goi_lai_sau", label: "Gọi lại sau", width: 12 },
+    { key: "thue_bao", label: "Thuê bao", width: 12 },
+    { key: "may_ban", label: "Máy bận", width: 12 },
+    { key: "nham_may", label: "Nhầm máy", width: 12 },
+    { key: "quan_tam", label: "Quan tâm", width: 12 },
+    { key: "tiem_nang", label: "Tiềm năng", width: 12 },
+    { key: "suy_nghi_them", label: "Suy nghĩ thêm", width: 14 },
+    { key: "khong_quan_tam", label: "Không quan tâm", width: 16 },
+    { key: "da_chot", label: "Đã chốt", width: 12 },
+    { key: "sai_doi_tuong", label: "Sai đối tượng", width: 14 },
+    { key: "cham_soc_lai", label: "Chăm sóc lại", width: 14 },
+    { key: "khac", label: "Khác", width: 10 },
+    { key: "tong", label: "Tổng", width: 10 },
+  ];
+
+  const colCount = cols.length;
+  ws.columns = cols.map((c) => ({ width: c.width }));
+
+  addSheetTitle(ws, "THỐNG KÊ TÌNH TRẠNG NGHE MÁY THEO NHÂN SỰ", colCount, dateFrom, dateTo);
+
+  ws.getRow(3).height = 24;
+  cols.forEach((c, i) => {
+    const cell = ws.getRow(3).getCell(i + 1);
+    cell.value = c.label;
+    cell.style = headerStyle(C.headerBg);
+  });
+
+  const hp = data.filter((r) => isHaiPhong(r.name));
+  const other = data.filter((r) => !isHaiPhong(r.name));
+  let rowIdx = 4;
+
+  const addGroupHeader = (label) => {
+    ws.mergeCells(rowIdx, 1, rowIdx, colCount);
+    const cell = ws.getRow(rowIdx).getCell(1);
+    cell.value = label;
+    cell.style = {
+      font: { bold: true, size: 9, color: { argb: C.headerFg }, name: "Calibri" },
+      fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FF334155" } },
+      alignment: { horizontal: "left", vertical: "middle", indent: 1 },
+    };
+    ws.getRow(rowIdx).height = 16;
+    rowIdx++;
+  };
+
+  const addDataRow = (r, i) => {
+    const bg = i % 2 === 0 ? C.rowBase : C.rowAlt;
+    const row = ws.getRow(rowIdx);
+    row.height = 18;
+    cols.forEach((c, ci) => {
+      const val = c.key === "name" ? r.name : (r[c.key] || 0);
+      row.getCell(ci + 1).value = val;
+      if (c.key === "name") {
+        row.getCell(ci + 1).style = cellStyle(bg, "FF1F2937", false, "left");
+      } else if (c.key === "tong") {
+        row.getCell(ci + 1).style = cellStyle(bg, C.totFg, true, "center");
+      } else {
+        const v = val || 0;
+        row.getCell(ci + 1).style = cellStyle(bg, v > 0 ? C.slateFg : "FFD1D5DB", v > 0, "center");
+      }
+    });
+    rowIdx++;
+  };
+
+  addGroupHeader("▸  FSC HẢI PHÒNG");
+  hp.forEach((r, i) => addDataRow(r, i));
+  addGroupHeader("▸  CƠ SỞ KHÁC");
+  other.forEach((r, i) => addDataRow(r, i));
+
+  // Totals row
+  const row = ws.getRow(rowIdx);
+  row.height = 22;
+  cols.forEach((c, ci) => {
+    if (c.key === "name") {
+      row.getCell(ci + 1).value = `TỔNG (${data.length} người)`;
+      row.getCell(ci + 1).style = totalsStyle(C.totFg, "left");
+    } else {
+      const sum = data.reduce((s, r) => s + (r[c.key] || 0), 0);
+      row.getCell(ci + 1).value = sum;
+      row.getCell(ci + 1).style = totalsStyle(sum > 0 ? (c.key === "tong" ? C.totFg : C.slateFg) : C.totFg);
+    }
+  });
+
+  ws.views = [{ state: "frozen", xSplit: 1, ySplit: 3 }];
+}
+
 // ── Main export function ────────────────────────────────────────────────────
-export async function exportReportExcel({ slaData, conversionData, statusBreakdown, dateFrom, dateTo }) {
+export async function exportReportExcel({ slaData, conversionData, statusBreakdown, callStatusBreakdown, dateFrom, dateTo }) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "FPT Nexus CRM";
+  wb.creator = "FPT School Hải Phòng CRM";
   wb.created = new Date();
   wb.modified = new Date();
 
@@ -455,6 +552,9 @@ export async function exportReportExcel({ slaData, conversionData, statusBreakdo
   buildConversionSheet(wb, conversionData, dateFrom, dateTo);
   if (statusBreakdown.length > 0) {
     buildStatusBreakdownSheet(wb, statusBreakdown, dateFrom, dateTo);
+  }
+  if (callStatusBreakdown && callStatusBreakdown.length > 0) {
+    buildCallStatusSheet(wb, callStatusBreakdown, dateFrom, dateTo);
   }
 
   const buffer = await wb.xlsx.writeBuffer();

@@ -10,6 +10,7 @@ from app.repositories.user_repository import UserRepository
 from app.core.call_status import lead_extra_call_status_label, norm_call_label
 from app.schemas.reports import (
     BranchSummary,
+    CallStatusBreakdownRow,
     ConversionRowOut,
     MonthlyReportOut,
     PriorityLeadOut,
@@ -56,6 +57,48 @@ def _classify_call_status(label: str) -> str:
     if any(x in n for x in ("không nghe máy", "thuê bao", "nhầm máy", "không phù hợp")):
         return "khong_phu_hop"
     return "chua_cap_nhat"
+
+
+def _classify_call_status_detail(label: str) -> str:
+    """Classify a call-status label into detailed call status bucket."""
+    n = norm_call_label(label)
+    if not n or n == norm_call_label("Chưa gọi"):
+        return "chua_goi"
+    if n == norm_call_label("Chưa liên hệ"):
+        return "chua_lien_he"
+    if any(x in n for x in ("chưa nghe máy lần 1", "không nghe máy lần 1")):
+        return "chua_nghe_may_1"
+    if any(x in n for x in ("chưa nghe máy lần 2", "không nghe máy lần 2")):
+        return "chua_nghe_may_2"
+    if any(x in n for x in ("chưa nghe máy lần 3", "không nghe máy lần 3")):
+        return "chua_nghe_may_3"
+    if any(x in n for x in ("đã nghe máy",)):
+        return "da_nghe_may"
+    if any(x in n for x in ("không nghe máy", "đã gọi - không nghe máy")):
+        return "chua_nghe_may_1"
+    if any(x in n for x in ("gọi lại sau", "hẹn gọi lại")):
+        return "goi_lai_sau"
+    if any(x in n for x in ("thuê bao", "đã gọi - thuê bao")):
+        return "thue_bao"
+    if any(x in n for x in ("máy bận", "bận", "đã gọi - bận")):
+        return "may_ban"
+    if any(x in n for x in ("nhầm máy", "đã gọi - nhầm máy")):
+        return "nham_may"
+    if "quan tâm" in n and "không" not in n:
+        return "quan_tam"
+    if any(x in n for x in ("tiềm năng",)):
+        return "tiem_nang"
+    if any(x in n for x in ("suy nghĩ",)):
+        return "suy_nghi_them"
+    if "không quan tâm" in n:
+        return "khong_quan_tam"
+    if any(x in n for x in ("đã chốt", "thanh toán", "hoàn thành")):
+        return "da_chot"
+    if any(x in n for x in ("sai đối tượng", "không phù hợp")):
+        return "sai_doi_tuong"
+    if any(x in n for x in ("chăm sóc lại", "gửi mail", "gửi zalo", "báo giá", "hợp đồng")):
+        return "cham_soc_lai"
+    return "khac"
 
 
 def _detect_branch(assignee_display: str) -> str:
@@ -144,6 +187,7 @@ async def _build_report(
     by_sale: List[SaleMonthlySlice] = []
     conversion_by_assignee: List[ConversionRowOut] = []
     status_breakdown: List[StatusBreakdownRow] = []
+    call_status_breakdown: List[CallStatusBreakdownRow] = []
 
     for assignee, rows in sorted(grouped.items(), key=lambda x: x[0].lower()):
         branch = _detect_branch(assignee)
@@ -172,6 +216,7 @@ async def _build_report(
         nb_count = 0
         ne_count = 0
         sb = StatusBreakdownRow(assignee=assignee, branch=branch)
+        csb = CallStatusBreakdownRow(assignee=assignee, branch=branch)
         for L in rows:
             bucket = _normalize_enrollment_bucket((L.extra or {}).get("Tình trạng nhập học"))
             if bucket == "REG":
@@ -183,6 +228,9 @@ async def _build_report(
             call_label = lead_extra_call_status_label(L.extra if isinstance(L.extra, dict) else None)
             cat = _classify_call_status(call_label)
             setattr(sb, cat, getattr(sb, cat) + 1)
+            cs_cat = _classify_call_status_detail(call_label)
+            setattr(csb, cs_cat, getattr(csb, cs_cat) + 1)
+        csb.tong = len(rows)
         total_reg += reg_count
         total_nb += nb_count
         total_ne += ne_count
@@ -199,6 +247,7 @@ async def _build_report(
             )
         )
         status_breakdown.append(sb)
+        call_status_breakdown.append(csb)
 
     # Branch summaries
     branch_data: Dict[str, BranchSummary] = {}
@@ -258,4 +307,5 @@ async def _build_report(
         top_priority_leads=top_priority,
         conversion_by_assignee=conversion_by_assignee,
         status_breakdown=status_breakdown,
+        call_status_breakdown=call_status_breakdown,
     )

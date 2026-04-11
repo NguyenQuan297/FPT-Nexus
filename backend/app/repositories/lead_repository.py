@@ -75,19 +75,22 @@ class LeadRepository:
                     Lead.phone_secondary.ilike(pat),
                     Lead.external_id.ilike(pat),
                 ))
-        if overdue_only:
-            q = q.where(Lead.last_contact_at.is_(None))
-
         result = await db.execute(q)
         rows = list(result.scalars().all())
 
         if overdue_only:
+            from app.core.call_status import lead_extra_call_status_label, norm_call_label
             from app.services.sla_service import sla_deadline
 
+            _NO_CONTACT = {"", norm_call_label("Chưa gọi"), norm_call_label("Chưa liên hệ")}
             now = datetime.now(timezone.utc)
             filtered: List[Lead] = []
             for lead in rows:
                 if lead.status == LEAD_STATUS_CLOSED:
+                    continue
+                ex = getattr(lead, "extra", None)
+                lbl = norm_call_label(lead_extra_call_status_label(ex if isinstance(ex, dict) else None))
+                if lbl not in _NO_CONTACT and lead.status != "new":
                     continue
                 c = lead.created_at
                 if c.tzinfo is None:

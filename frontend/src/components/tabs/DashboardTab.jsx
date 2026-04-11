@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   BarFrequencyChart,
@@ -33,6 +33,21 @@ export default function DashboardTab({
   report,
 }) {
   const [period, setPeriod] = useState("7d");
+  const [localProgress, setLocalProgress] = useState(chartProgress);
+  const periodRef = useRef(period);
+
+  useEffect(() => {
+    if (periodRef.current !== period) {
+      periodRef.current = period;
+      setLocalProgress(0);
+      const id = window.setTimeout(() => setLocalProgress(1), 60);
+      return () => window.clearTimeout(id);
+    }
+  }, [period]);
+
+  useEffect(() => { setLocalProgress(chartProgress); }, [chartProgress]);
+
+  const animProgress = localProgress;
   const atRisk = visibleStats?.at_risk ?? 0;
   const conversionRegPct = visibleStats?.conversion_reg_pct ?? 0;
   const dailyMisses = visibleStats?.daily_misses_today ?? 0;
@@ -46,7 +61,7 @@ export default function DashboardTab({
     { title: "Chưa liên hệ", value: uncontacted, tone: "amber" },
     { title: "Sắp quá hạn (12-18h)", value: atRisk, tone: "red" },
     { title: "Quá hạn SLA", value: overdueCount, tone: "blue" },
-    { title: "Đã liên hệ hôm nay", value: contactedToday, tone: "green" },
+    { title: "Đã liên hệ", value: contactedToday, tone: "green" },
     { title: "Tỷ lệ đạt SLA", value: `${slaCompliance.toFixed(1)}%`, tone: "blue" },
     { title: "Tỷ lệ chuyển đổi REG", value: `${Number(conversionRegPct || 0).toFixed(1)}%`, tone: "green" },
     ...(user.role === "admin" && dailyMisses != null
@@ -144,22 +159,22 @@ export default function DashboardTab({
             style={styles.dashboardCharts}
           >
             <ChartCard title="Tần suất lead theo ngày" subtitle="Số lượng lead nhận mới ngày" chartType="Bar">
-              <ZoomableChart chartTitle="Tần suất lead theo ngày">
-                {(z) => (
+              <ZoomableChart chartTitle="Tần suất lead theo ngày" allData={trend7}>
+                {(z, modalData) => (
                   <BarFrequencyChart
-                    data={trendData}
-                    progress={chartProgress}
+                    data={z && modalData ? modalData : trendData}
+                    progress={animProgress}
                     zoomed={z}
                   />
                 )}
               </ZoomableChart>
             </ChartCard>
             <ChartCard title="Tỷ lệ liên hệ theo ngày" subtitle="Tỷ lệ % lead được liên hệ trong ngày" chartType="Line">
-              <ZoomableChart chartTitle="Tỷ lệ liên hệ theo ngày">
-                {(z) => (
+              <ZoomableChart chartTitle="Tỷ lệ liên hệ theo ngày" allData={contactRate7}>
+                {(z, modalData) => (
                   <LineTrendChart
-                    data={contactRateData}
-                    progress={chartProgress}
+                    data={z && modalData ? modalData : contactRateData}
+                    progress={animProgress}
                     zoomed={z}
                     valueSuffix="%"
                   />
@@ -167,11 +182,11 @@ export default function DashboardTab({
               </ZoomableChart>
             </ChartCard>
             <ChartCard title="Xu hướng chuyển đổi REG" subtitle="Số lead chuyển đổi thành học sinh đăng ký" chartType="Line">
-              <ZoomableChart chartTitle="Xu hướng chuyển đổi REG">
-                {(z) => (
+              <ZoomableChart chartTitle="Xu hướng chuyển đổi REG" allData={conversionRate7}>
+                {(z, modalData) => (
                   <LineTrendChart
-                    data={conversionRateData}
-                    progress={chartProgress}
+                    data={z && modalData ? modalData : conversionRateData}
+                    progress={animProgress}
                     zoomed={z}
                     valueSuffix="%"
                   />
@@ -186,7 +201,7 @@ export default function DashboardTab({
                     contacted={Math.max(0, totalLeads - uncontacted)}
                     overdue={overdueCount}
                     waiting={Math.max(0, uncontacted - overdueCount)}
-                    progress={chartProgress}
+                    progress={animProgress}
                     zoomed={z}
                   />
                 )}
@@ -209,7 +224,7 @@ export default function DashboardTab({
             <div style={{ ...styles.card, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 <div style={{ width: 3, height: 18, borderRadius: 2, background: "#22c55e" }} />
-                <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Chuyển đổi theo tư vấn viên</h4>
+                <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Chuyển đổi theo tư vấn viên</h4>
               </div>
               <ConversionMiniTable data={(report.conversion_by_assignee || []).filter(r => r.assignee !== "Chưa gán" && isHP(r.assignee))} />
             </div>
@@ -217,7 +232,7 @@ export default function DashboardTab({
             <div style={{ ...styles.card, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 <div style={{ width: 3, height: 18, borderRadius: 2, background: "#6366f1" }} />
-                <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Trạng thái lead theo nhân sự</h4>
+                <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Trạng thái lead theo nhân sự</h4>
               </div>
               <StatusMiniTable data={(report.status_breakdown || []).filter(r => r.assignee !== "Chưa gán" && isHP(r.assignee))} />
             </div>

@@ -30,7 +30,7 @@ export function useDashboardApp() {
   const [contactRate7, setContactRate7] = useState([]);
   const [conversionRate7, setConversionRate7] = useState([]);
   const [activeLeadId, setActiveLeadId] = useState(null);
-  const [chartProgress, setChartProgress] = useState(1);
+  const [chartProgress, setChartProgress] = useState(0);
   const prevTabForChartsRef = useRef(null);
 
   const [assigned, setAssigned] = useState("");
@@ -131,6 +131,9 @@ export function useDashboardApp() {
         setContactRate7(res.contact_rate_7d || []);
         setConversionRate7(res.conversion_rate_7d || []);
       });
+      // Trigger chart grow-up animation after data loads
+      setChartProgress(0);
+      window.setTimeout(() => setChartProgress(1), 80);
     } catch (e) {
       startTransition(() => {
         setStats(null);
@@ -603,10 +606,13 @@ export function useDashboardApp() {
         khongPhuHop: r.khong_phu_hop,
         chuaCapNhat: r.chua_cap_nhat,
       }));
+    const callStatusBreakdown = (report.call_status_breakdown || [])
+      .filter((r) => r.assignee !== "Chưa gán")
+      .map((r) => ({ ...r, name: r.assignee }));
     const dateFrom = `01/${String(repM).padStart(2, "0")}/${repY}`;
     const lastDay = new Date(repY, repM, 0).getDate();
     const dateTo = `${lastDay}/${String(repM).padStart(2, "0")}/${repY}`;
-    await exportReportExcel({ slaData, conversionData, statusBreakdown, dateFrom, dateTo });
+    await exportReportExcel({ slaData, conversionData, statusBreakdown, callStatusBreakdown, dateFrom, dateTo });
   }
 
   async function downloadReportExportTotal() {
@@ -620,7 +626,10 @@ export function useDashboardApp() {
     const statusBreakdown = (r.status_breakdown || [])
       .filter((s) => s.assignee !== "Chưa gán")
       .map((s) => ({ name: s.assignee, branch: s.branch, quanTam: s.quan_tam, suyNghiThem: s.suy_nghi_them, tiemNang: s.tiem_nang, khongQuanTam: s.khong_quan_tam, khongPhuHop: s.khong_phu_hop, chuaCapNhat: s.chua_cap_nhat }));
-    await exportReportExcel({ slaData, conversionData, statusBreakdown, dateFrom: "Toàn bộ", dateTo: "dữ liệu" });
+    const callStatusBreakdown = (r.call_status_breakdown || [])
+      .filter((s) => s.assignee !== "Chưa gán")
+      .map((s) => ({ ...s, name: s.assignee }));
+    await exportReportExcel({ slaData, conversionData, statusBreakdown, callStatusBreakdown, dateFrom: "Toàn bộ", dateTo: "dữ liệu" });
   }
 
   async function downloadLatestSync() {

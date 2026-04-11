@@ -42,15 +42,23 @@ export function formatDt(iso) {
   }
 }
 
+/** Check if lead is "uncontacted" using call status labels (same logic as backend). */
+export function isUncontacted(lead) {
+  if (lead.status === "closed") return false;
+  const lbl = (callStatusFromLead(lead) || "").trim().toLowerCase().normalize("NFC");
+  const noContact = ["", "chưa gọi", "chưa liên hệ"];
+  return noContact.includes(lbl) || lead.status === "new";
+}
+
 export function isClientOverdue(lead) {
-  if (lead.status === "closed" || lead.last_contact_at) return false;
+  if (lead.status === "closed" || !isUncontacted(lead)) return false;
   const created = new Date(lead.created_at).getTime();
   return (Date.now() - created) / 3600000 > 16;
 }
 
 export function rowStyle(lead) {
   if (isClientOverdue(lead)) return { background: "#fff1f2", borderLeft: "4px solid #dc2626", cursor: "pointer" };
-  if (!lead.last_contact_at && lead.status !== "closed") return { background: "#fffbeb", cursor: "pointer" };
-  if (lead.last_contact_at) return { background: "#f0fdf4", cursor: "pointer" };
+  if (isUncontacted(lead)) return { background: "#fffbeb", cursor: "pointer" };
+  if (!isUncontacted(lead) && lead.status !== "closed") return { background: "#f0fdf4", cursor: "pointer" };
   return { cursor: "pointer" };
 }

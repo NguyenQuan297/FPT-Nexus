@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CALL_STATUS_OPTIONS, LEADS_PAGE_SIZE } from "../../constants/leadConstants";
 import { styles } from "../../styles/appStyles";
-import { callStatusFromLead, formatDt, isClientOverdue } from "../../utils/leadUiHelpers";
+import { callStatusFromLead, formatDt, isClientOverdue, isUncontacted } from "../../utils/leadUiHelpers";
 
 /* ── Enrollment bucket from Excel extra fields ──── */
 function enrollBucket(lead) {
@@ -113,14 +113,13 @@ function StatusBadge({ lead }) {
 
 /* ── SLA status ─────────────────────────────────── */
 function SlaStatus({ lead }) {
-  const overdue = isClientOverdue(lead);
-  if (lead.last_contact_at) {
+  if (lead.status === "closed" || !isUncontacted(lead)) {
     return <span style={{ color: "#22c55e", fontSize: 12, fontWeight: 600 }}>● Còn hạn</span>;
   }
-  if (overdue) {
+  if (isClientOverdue(lead)) {
     return <span style={{ color: "#ef4444", fontSize: 12, fontWeight: 600 }}>⚠ Quá hạn</span>;
   }
-  return <span style={{ color: "#f59e0b", fontSize: 12, fontWeight: 600 }}>⚠ Sắp quá hạn</span>;
+  return <span style={{ color: "#f59e0b", fontSize: 12, fontWeight: 600 }}>⚠ Chưa liên hệ</span>;
 }
 
 /* ── Detail panel tab content ──────────────────── */

@@ -237,11 +237,26 @@ async def query_leads_page(
 
     today = datetime.now(timezone.utc).date()
     now = datetime.now(timezone.utc)
-    uncontacted = sum(1 for r in rows if r.last_contact_at is None and r.status != "closed")
+
+    # Use call-status labels (same as filter logic) to determine uncontacted
+    from app.core.call_status import lead_extra_call_status_label as _lbl, norm_call_label as _ncl2
+    _NO_CONTACT_KPI = {"", _ncl2("Chưa gọi"), _ncl2("Chưa liên hệ")}
+
+    def _is_uncontacted(r) -> bool:
+        if r.status == "closed":
+            return False
+        ex = getattr(r, "extra", None)
+        lbl = _ncl2(_lbl(ex if isinstance(ex, dict) else None))
+        return lbl in _NO_CONTACT_KPI or r.status == "new"
+
+    uncontacted = sum(1 for r in rows if _is_uncontacted(r))
     active_leads = sum(1 for r in rows if r.status == "active")
     contacting = sum(1 for r in rows if r.status == "contacting")
     late = sum(1 for r in rows if r.status == "late")
-    contacted_today = sum(1 for r in rows if r.last_contact_at and _same_utc_day(r.last_contact_at, today))
+    contacted_today = sum(
+        1 for r in rows
+        if r.last_contact_at and _same_utc_day(r.last_contact_at, today) and not _is_uncontacted(r)
+    )
 
     overdue = 0
     at_risk = 0
@@ -249,7 +264,7 @@ async def query_leads_page(
     for r in rows:
         if _normalize_enrollment_bucket((r.extra or {}).get("Tình trạng nhập học")) == "REG":
             reg_count += 1
-        if r.status == "closed" or r.last_contact_at is not None:
+        if r.status == "closed" or not _is_uncontacted(r):
             continue
         created = r.created_at if r.created_at.tzinfo else r.created_at.replace(tzinfo=timezone.utc)
         age_h = (now - created).total_seconds() / 3600

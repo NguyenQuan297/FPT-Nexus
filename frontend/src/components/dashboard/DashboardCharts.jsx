@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { styles } from "../../styles/appStyles";
 
@@ -48,8 +49,15 @@ function ChartTooltip({ x, y, lines }) {
  * Click chart to zoom (modal). Esc / background / Close to exit.
  * children(zoomed: boolean)
  */
-export function ZoomableChart({ chartTitle, children }) {
+/**
+ * Click chart to zoom (modal). Esc / background / Close to exit.
+ * Props:
+ *   allData  – full (unsliced) dataset for period selector inside modal
+ *   children(zoomed: boolean, data: array|null) – data=null means use parent data (normal view)
+ */
+export function ZoomableChart({ chartTitle, allData, children }) {
   const [zoom, setZoom] = useState(false);
+  const [modalPeriod, setModalPeriod] = useState("all");
 
   useEffect(() => {
     if (!zoom) return;
@@ -59,6 +67,20 @@ export function ZoomableChart({ chartTitle, children }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [zoom]);
+
+  const sliceByPeriod = (data, period) => {
+    if (!data || !data.length || period === "all") return data;
+    const days = period === "7d" ? 7 : 30;
+    return data.slice(-days);
+  };
+
+  const modalData = allData ? sliceByPeriod(allData, modalPeriod) : null;
+
+  const periodBtns = [
+    { id: "7d", label: "7 ngày" },
+    { id: "30d", label: "30 ngày" },
+    { id: "all", label: "Tất cả" },
+  ];
 
   return (
     <>
@@ -75,9 +97,9 @@ export function ZoomableChart({ chartTitle, children }) {
         style={{ cursor: "zoom-in", borderRadius: 8, outline: "none" }}
         title="Bấm để phóng to"
       >
-        {children(false)}
+        {children(false, null)}
       </div>
-      {zoom && (
+      {zoom && createPortal(
         <div
           role="presentation"
           style={{
@@ -99,30 +121,49 @@ export function ZoomableChart({ chartTitle, children }) {
             style={{
               background: "#fff",
               borderRadius: 16,
-              padding: 20,
-              maxWidth: "min(96vw, 1120px)",
-              maxHeight: "92vh",
+              padding: 24,
+              width: "min(94vw, 1080px)",
+              maxHeight: "90vh",
               overflow: "auto",
               boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 12 }}>
-              <strong style={{ fontSize: 16, color: "#0f172a" }}>{chartTitle}</strong>
-              <button
-                type="button"
-                onClick={() => setZoom(false)}
-                style={{
-                  ...styles.btnGhost,
-                  fontWeight: 700,
-                  flexShrink: 0,
-                }}
-              >
-                Đóng (Esc)
-              </button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12 }}>
+              <strong style={{ fontSize: 18, color: "#0f172a" }}>{chartTitle}</strong>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {allData && (
+                  <div style={{ display: "flex", gap: 0, borderRadius: 10, overflow: "hidden", border: "1px solid #e2e8f0" }}>
+                    {periodBtns.map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => setModalPeriod(b.id)}
+                        style={{
+                          border: "none",
+                          background: modalPeriod === b.id ? "#f97316" : "#fff",
+                          color: modalPeriod === b.id ? "#fff" : "#64748b",
+                          padding: "5px 14px", fontSize: 12, fontWeight: 600,
+                          cursor: "pointer", transition: "all 0.2s ease",
+                        }}
+                      >
+                        {b.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setZoom(false)}
+                  style={{ ...styles.btnGhost, fontWeight: 700, flexShrink: 0 }}
+                >
+                  Đóng (Esc)
+                </button>
+              </div>
             </div>
-            {children(true)}
+            {children(true, modalData)}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
@@ -269,10 +310,12 @@ export function BarFrequencyChart({
   const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
 
   const max = data.length ? Math.max(...data.map((d) => d.value), 1) : 1;
-  const scrollWide = data.length > (zoomed ? 20 : 12);
-  const colW = zoomed ? 22 : scrollWide ? 16 : undefined;
-  const innerMinW = scrollWide ? data.length * ((colW || 16) + 4) : undefined;
-  const barScale = zoomed ? 220 : 150;
+  const scrollWide = zoomed ? data.length > 30 : data.length > 12;
+  const colW = zoomed ? 32 : scrollWide ? 16 : undefined;
+  const innerMinW = zoomed
+    ? data.length * ((colW || 32) + 6)
+    : scrollWide ? data.length * ((colW || 16) + 4) : undefined;
+  const barScale = zoomed ? 280 : 150;
 
   const onColMove = useCallback((e) => {
     setTipPos({ x: e.clientX, y: e.clientY });
@@ -281,17 +324,17 @@ export function BarFrequencyChart({
   return (
     <div
       style={{
-        ...styles.chartBody,
-        overflowX: scrollWide ? "auto" : "visible",
+        ...(zoomed ? {} : styles.chartBody),
+        overflowX: zoomed || scrollWide ? "auto" : "hidden",
         width: "100%",
-        minHeight: zoomed ? 320 : styles.chartBody.height,
+        ...(zoomed ? { minHeight: 380 } : {}),
       }}
     >
       <div
         style={{
           ...styles.barChartWrap,
           minWidth: innerMinW,
-          minHeight: zoomed ? 260 : 180,
+          minHeight: zoomed ? 340 : 180,
           justifyContent: scrollWide ? "flex-start" : "space-between",
           gap: scrollWide ? (zoomed ? 6 : 4) : undefined,
         }}
@@ -358,15 +401,28 @@ export function BarFrequencyChart({
 /* ── Line Trend Chart ──────────────────────────── */
 
 export function LineTrendChart({ data, progress, zoomed = false, valueSuffix = "" }) {
-  const height = zoomed ? 280 : 180;
-  const padding = zoomed ? 24 : 18;
+  const height = zoomed ? 340 : 180;
+  const padding = zoomed ? 28 : 18;
   const n = data.length;
   const svgRef = useRef(null);
   const [hoverI, setHoverI] = useState(null);
   const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
+  const containerRef = useRef(null);
+  const [containerW, setContainerW] = useState(0);
 
-  const pxPerSeg = zoomed ? 10 : 6;
-  const width = n > 1 ? Math.max(zoomed ? 480 : 320, (n - 1) * pxPerSeg + padding * 2) : zoomed ? 480 : 320;
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setContainerW(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const minSegPx = zoomed ? 28 : 6;
+  const minNeeded = n > 1 ? (n - 1) * minSegPx + padding * 2 : zoomed ? 600 : 320;
+  const width = zoomed
+    ? Math.max(minNeeded, containerW || 600)
+    : Math.max(minNeeded, 320);
   const max = n ? Math.max(...data.map((d) => d.value), 1) : 1;
   const step = n > 1 ? (width - padding * 2) / (n - 1) : 0;
   const baseline = height - padding;
@@ -421,21 +477,23 @@ export function LineTrendChart({ data, progress, zoomed = false, valueSuffix = "
 
   return (
     <div
+      ref={containerRef}
       style={{
-        ...styles.chartBody,
-        overflowX: width > (zoomed ? 500 : 400) ? "auto" : "visible",
+        ...(zoomed ? {} : styles.chartBody),
+        overflowX: zoomed && minNeeded > (containerW || 600) ? "auto" : "hidden",
         width: "100%",
-        minHeight: zoomed ? 320 : styles.chartBody.height,
+        ...(zoomed ? { minHeight: 380 } : {}),
       }}
     >
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
         style={{
-          minWidth: width > (zoomed ? 500 : 400) ? width : "100%",
-          width: "100%",
-          height: zoomed ? 300 : 190,
+          width: zoomed ? Math.max(width, containerW || 600) : "100%",
+          height: zoomed ? 360 : 190,
           cursor: "crosshair",
+          display: "block",
         }}
         onMouseMove={onSvgMove}
         onMouseLeave={onSvgLeave}
@@ -514,24 +572,24 @@ export function PieStatusChart({ total, contacted, waiting, overdue, progress, z
     { label: "Chưa liên hệ", value: waiting, color: "#f59e0b" },
     ...(overdue > 0 ? [{ label: "Quá hạn", value: overdue, color: "#ef4444" }] : []),
   ].filter((x) => x.value > 0);
-  const radius = zoomed ? 64 : 54;
+  const radius = zoomed ? 80 : 54;
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
-  const svgPx = zoomed ? 220 : 170;
+  const svgPx = zoomed ? 300 : 170;
   return (
     <div
       style={{
-        ...styles.chartBody,
+        ...(zoomed ? {} : styles.chartBody),
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
-        gap: zoomed ? 20 : 16,
-        minHeight: zoomed ? 280 : undefined,
+        justifyContent: zoomed ? "center" : "space-between",
+        gap: zoomed ? 40 : 16,
+        ...(zoomed ? { minHeight: 360, padding: "20px 0" } : {}),
       }}
     >
-      <svg viewBox="0 0 160 160" style={{ width: svgPx, height: svgPx, flexShrink: 0 }}>
-        <g transform="translate(80,80) rotate(-90)">
-          <circle r={radius} fill="none" stroke="#f1f5f9" strokeWidth="20" />
+      <svg viewBox={zoomed ? "0 0 220 220" : "0 0 160 160"} style={{ width: svgPx, height: svgPx, flexShrink: 0 }}>
+        <g transform={zoomed ? "translate(110,110) rotate(-90)" : "translate(80,80) rotate(-90)"}>
+          <circle r={radius} fill="none" stroke="#f1f5f9" strokeWidth={zoomed ? 24 : 20} />
           {parts.map((part) => {
             const ratio = total ? part.value / total : 0;
             const seg = circumference * ratio * progress;
@@ -544,7 +602,7 @@ export function PieStatusChart({ total, contacted, waiting, overdue, progress, z
                 r={radius}
                 fill="none"
                 stroke={part.color}
-                strokeWidth="20"
+                strokeWidth={zoomed ? 24 : 20}
                 strokeDasharray={dashArray}
                 strokeDashoffset={dashOffset}
                 strokeLinecap="round"
@@ -553,10 +611,10 @@ export function PieStatusChart({ total, contacted, waiting, overdue, progress, z
             );
           })}
         </g>
-        <text x="80" y="74" textAnchor="middle" fontSize="12" fill="#94a3b8" fontWeight="500">
+        <text x={zoomed ? 110 : 80} y={zoomed ? 103 : 74} textAnchor="middle" fontSize={zoomed ? 14 : 12} fill="#94a3b8" fontWeight="500">
           Tổng
         </text>
-        <text x="80" y="96" textAnchor="middle" fontSize="24" fontWeight="800" fill="#0f172a">
+        <text x={zoomed ? 110 : 80} y={zoomed ? 128 : 96} textAnchor="middle" fontSize={zoomed ? 28 : 24} fontWeight="800" fill="#0f172a">
           {total.toLocaleString("vi-VN")}
         </text>
       </svg>
