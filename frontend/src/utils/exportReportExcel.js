@@ -112,7 +112,7 @@ function buildSummarySheet(wb, sla, conv, dateFrom, dateTo) {
 
   ws.columns = [{ width: 28 }, { width: 18 }];
 
-  addSheetTitle(ws, "BÁO CÁO TỔNG QUAN — FPT NEXUS CRM", 2, dateFrom, dateTo);
+  addSheetTitle(ws, "BÁO CÁO TỔNG QUAN — FPT SCHOOL HẢI PHÒNG", 2, dateFrom, dateTo);
 
   const metrics = [
     ["Tổng lead", totalLeads],
