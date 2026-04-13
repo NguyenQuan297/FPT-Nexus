@@ -41,6 +41,65 @@ def _normalize_enrollment_bucket(raw: object) -> str | None:
     return None
 
 
+_INTEREST_COLUMN_KEYS = (
+    "Mức độ quan tâm",
+    "Muc do quan tam",
+    "Mức độ quan tâm (nếu có)",
+    "Mức độ",
+    "Mức quan tâm",
+)
+
+
+def _classify_interest_level(raw: object) -> str | None:
+    """Map an explicit 'Mức độ quan tâm' cell value to one of the 6 buckets.
+
+    Returns None when the cell is empty so callers can fall back to inferring
+    the bucket from the call-status column.
+    """
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    n = norm_call_label(text)
+    if not n:
+        return None
+    if "không quan tâm" in n:
+        return "khong_quan_tam"
+    if "không phù hợp" in n or "khong phu hop" in n:
+        return "khong_phu_hop"
+    if "suy nghĩ" in n or "suy nghi" in n:
+        return "suy_nghi_them"
+    if "tiềm năng" in n or "tiem nang" in n:
+        return "tiem_nang"
+    if "quan tâm" in n or "quan tam" in n:
+        return "quan_tam"
+    if "chưa cập nhật" in n or "chua cap nhat" in n or "chưa" in n:
+        return "chua_cap_nhat"
+    return None
+
+
+def _interest_from_extra(extra: object) -> str | None:
+    """Read the explicit 'Mức độ quan tâm' cell from a lead's extra dict."""
+    if not isinstance(extra, dict):
+        return None
+    for key in _INTEREST_COLUMN_KEYS:
+        if key in extra:
+            bucket = _classify_interest_level(extra.get(key))
+            if bucket is not None:
+                return bucket
+    # Case-insensitive / accent-insensitive fallback for slightly different headers.
+    for k, v in extra.items():
+        if not isinstance(k, str):
+            continue
+        normalized = norm_call_label(k)
+        if "muc do quan tam" in normalized or "muc quan tam" in normalized:
+            bucket = _classify_interest_level(v)
+            if bucket is not None:
+                return bucket
+    return None
+
+
 def _classify_call_status(label: str) -> str:
     """Classify a call-status label into one of 6 interest buckets."""
     n = norm_call_label(label)
@@ -226,7 +285,10 @@ async def _build_report(
             elif bucket == "NE":
                 ne_count += 1
             call_label = lead_extra_call_status_label(L.extra if isinstance(L.extra, dict) else None)
-            cat = _classify_call_status(call_label)
+            # Prefer the explicit "Mức độ quan tâm" column from Excel when present;
+            # only fall back to inferring from the call-status column when the cell
+            # is blank. This matches how admins fill the source spreadsheet.
+            cat = _interest_from_extra(L.extra) or _classify_call_status(call_label)
             setattr(sb, cat, getattr(sb, cat) + 1)
             cs_cat = _classify_call_status_detail(call_label)
             setattr(csb, cs_cat, getattr(csb, cs_cat) + 1)
