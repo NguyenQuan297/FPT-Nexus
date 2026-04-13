@@ -49,6 +49,7 @@ export function useDashboardApp() {
   const [notifs, setNotifs] = useState([]);
   const [users, setUsers] = useState([]);
   const [report, setReport] = useState(null);
+  const [totalReport, setTotalReport] = useState(null);
   const [repY, setRepY] = useState(new Date().getFullYear());
   const [repM, setRepM] = useState(new Date().getMonth() + 1);
   const [worstMaxDays, setWorstMaxDays] = useState(35);
@@ -183,14 +184,24 @@ export function useDashboardApp() {
     if (user?.role !== "admin") return;
     setErr(null);
     try {
-      const r = await apiFetch(
-        `/api/v1/reports/monthly?year=${repY}&month=${repM}&worst_max_days=${worstMaxDays}`
-      );
+      const [r, rt] = await Promise.all([
+        apiFetch(`/api/v1/reports/monthly?year=${repY}&month=${repM}&worst_max_days=${worstMaxDays}`),
+        apiFetch(`/api/v1/reports/date-range?date_from=2020-01-01&date_to=2099-12-31&worst_max_days=${worstMaxDays}`),
+      ]);
       setReport(r);
+      setTotalReport(rt);
     } catch (x) {
       setErr(String(x.message || x));
     }
   }, [repY, repM, worstMaxDays, user]);
+
+  // Auto-load on first admin session so the dashboard "total" tables populate
+  // even after a hard reload (no manual navigation through the Reports tab needed).
+  useEffect(() => {
+    if (user?.role === "admin") {
+      loadReport();
+    }
+  }, [user, loadReport]);
 
   useEffect(() => {
     setLeadsPage(1);
@@ -615,6 +626,32 @@ export function useDashboardApp() {
     await exportReportExcel({ slaData, conversionData, statusBreakdown, callStatusBreakdown, dateFrom, dateTo });
   }
 
+  async function downloadReportExportByDay(dateStr) {
+    const day = (dateStr || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      throw new Error("Ngày không hợp lệ.");
+    }
+    const r = await apiFetch(`/api/v1/reports/date-range?date_from=${day}&date_to=${day}&worst_max_days=${worstMaxDays}`);
+    if (!r || (r.total_leads_created || 0) === 0) {
+      throw new Error("Không có dữ liệu trong ngày được chọn — không thể xuất file.");
+    }
+    const slaData = (r.by_sale || [])
+      .filter((s) => s.assignee !== "Chưa gán")
+      .map((s) => ({ name: s.assignee, leads: s.total_leads, lateLeads: s.overdue_leads, slaRate: `${s.sla_compliance_pct}%`, slaNum: s.sla_compliance_pct }));
+    const conversionData = (r.conversion_by_assignee || [])
+      .filter((c) => c.assignee !== "Chưa gán")
+      .map((c) => ({ name: c.assignee, totalLeads: c.total_leads, reg: c.reg_count, nb: c.nb_count, ne: c.ne_count }));
+    const statusBreakdown = (r.status_breakdown || [])
+      .filter((s) => s.assignee !== "Chưa gán")
+      .map((s) => ({ name: s.assignee, branch: s.branch, quanTam: s.quan_tam, suyNghiThem: s.suy_nghi_them, tiemNang: s.tiem_nang, khongQuanTam: s.khong_quan_tam, khongPhuHop: s.khong_phu_hop, chuaCapNhat: s.chua_cap_nhat }));
+    const callStatusBreakdown = (r.call_status_breakdown || [])
+      .filter((s) => s.assignee !== "Chưa gán")
+      .map((s) => ({ ...s, name: s.assignee }));
+    const [yyyy, mm, dd] = day.split("-");
+    const label = `${dd}/${mm}/${yyyy}`;
+    await exportReportExcel({ slaData, conversionData, statusBreakdown, callStatusBreakdown, dateFrom: label, dateTo: label });
+  }
+
   async function downloadReportExportTotal() {
     const r = await apiFetch(`/api/v1/reports/date-range?date_from=2020-01-01&date_to=2099-12-31&worst_max_days=${worstMaxDays}`);
     const slaData = (r.by_sale || [])
@@ -655,6 +692,7 @@ export function useDashboardApp() {
     setConversionRate7([]);
     setNotifs([]);
     setReport(null);
+    setTotalReport(null);
     setUsers([]);
     setAssigneeOptions([]);
     setSelected({});
@@ -873,6 +911,7 @@ export function useDashboardApp() {
     notifs,
     users,
     report,
+    totalReport,
     repY,
     setRepY,
     repM,
@@ -921,6 +960,7 @@ export function useDashboardApp() {
     runBulkAction,
     runExcelSync,
     downloadReportExport,
+    downloadReportExportByDay,
     downloadReportExportTotal,
     downloadLatestSync,
     logout,

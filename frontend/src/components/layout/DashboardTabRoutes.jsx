@@ -127,8 +127,10 @@ export default function DashboardTabRoutes({ app }) {
     setWorstMaxDays,
     loadReport,
     downloadReportExport,
+    downloadReportExportByDay,
     downloadReportExportTotal,
     report,
+    totalReport,
     syncMeta,
     runExcelSync,
     downloadLatestSync,
@@ -139,7 +141,7 @@ export default function DashboardTabRoutes({ app }) {
   return (
     <>
       {err && <div style={styles.error}>{err}</div>}
-      {user.role === "admin" && totalLeads === 0 && !uploading && (
+      {user.role === "admin" && !uploading && totalReport && (totalReport.total_leads_created || 0) === 0 && (
         <div style={styles.banner}>Vui lòng tải file Excel để hiển thị dữ liệu vận hành.</div>
       )}
       <ToastStack toasts={toasts} />
@@ -207,6 +209,7 @@ export default function DashboardTabRoutes({ app }) {
             chartProgress={chartProgress}
             nowLabel={app.nowLabel}
             report={report}
+            totalReport={totalReport}
             onOpenLeads={() => {
               setTab("leads");
               setOverdueOnly(false);
@@ -308,6 +311,7 @@ export default function DashboardTabRoutes({ app }) {
             setWorstMaxDays={setWorstMaxDays}
             loadReport={loadReport}
             downloadReportExport={downloadReportExport}
+            downloadReportExportByDay={downloadReportExportByDay}
             downloadReportExportTotal={downloadReportExportTotal}
             setErr={setErr}
             report={report}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { styles } from "../../styles/appStyles";
 
@@ -197,12 +197,38 @@ export default function ReportsTab({
   setRepM,
   loadReport,
   downloadReportExport,
+  downloadReportExportByDay,
   downloadReportExportTotal,
   setErr,
   report,
 }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [branchFilter, setBranchFilter] = useState("all");
+  const [dayMenuOpen, setDayMenuOpen] = useState(false);
+  const [dayPicked, setDayPicked] = useState(() => new Date().toISOString().slice(0, 10));
+  const dayMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!dayMenuOpen) return undefined;
+    const onDocClick = (e) => {
+      if (dayMenuRef.current && !dayMenuRef.current.contains(e.target)) setDayMenuOpen(false);
+    };
+    const onEsc = (e) => {
+      if (e.key === "Escape") setDayMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [dayMenuOpen]);
+
+  const confirmDayExport = () => {
+    if (!dayPicked) return;
+    setDayMenuOpen(false);
+    downloadReportExportByDay(dayPicked).catch((err) => setErr(String(err?.message || err)));
+  };
 
   const dateFrom = `${repY}-${String(repM).padStart(2, "0")}-01`;
   const lastDay = new Date(repY, repM, 0).getDate();
@@ -285,6 +311,32 @@ export default function ReportsTab({
         <button style={exportBtn} onClick={() => downloadReportExport().catch((e) => setErr(String(e)))}>
           <IconDownload /> Xuất theo tháng
         </button>
+        <div ref={dayMenuRef} style={{ position: "relative" }}>
+          <button style={exportDayBtn} onClick={() => setDayMenuOpen((v) => !v)}>
+            <IconDownload /> Xuất theo ngày
+          </button>
+          {dayMenuOpen && (
+            <div style={dayMenuPanel}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 6 }}>Chọn ngày xuất</div>
+              <input
+                type="date"
+                value={dayPicked}
+                onChange={(e) => setDayPicked(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") confirmDayExport(); }}
+                style={{ ...styles.input, width: "100%" }}
+                autoFocus
+              />
+              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                <button style={{ ...exportTotalBtn, padding: "7px 12px", flex: 1 }} onClick={() => setDayMenuOpen(false)}>
+                  Hủy
+                </button>
+                <button style={{ ...exportDayBtn, padding: "7px 12px", flex: 1, justifyContent: "center" }} onClick={confirmDayExport}>
+                  Xuất
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <button style={exportTotalBtn} onClick={() => downloadReportExportTotal().catch((e) => setErr(String(e)))}>
           <IconDownload /> Xuất tổng
         </button>
@@ -561,6 +613,19 @@ const filterIconBtn = { border: "1px solid #e2e8f0", background: "#fff", borderR
 const applyBtn = { border: "none", background: "#0f172a", color: "#fff", borderRadius: 10, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" };
 const exportBtn = { border: "none", background: "#217346", color: "#fff", borderRadius: 10, padding: "9px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 };
 const exportTotalBtn = { border: "1px solid #217346", background: "#fff", color: "#217346", borderRadius: 10, padding: "9px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 };
+const exportDayBtn = { border: "none", background: "#0ea5e9", color: "#fff", borderRadius: 10, padding: "9px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 };
+const dayMenuPanel = {
+  position: "absolute",
+  top: "calc(100% + 6px)",
+  right: 0,
+  zIndex: 50,
+  background: "#fff",
+  border: "1px solid #e2e8f0",
+  borderRadius: 12,
+  padding: 12,
+  minWidth: 220,
+  boxShadow: "0 12px 32px rgba(15,23,42,0.18)",
+};
 const kpiCard = { borderRadius: 16, padding: "14px 16px", border: "1px solid rgba(0,0,0,0.04)", boxShadow: "0 1px 4px rgba(0,0,0,0.03)" };
 
 const branchCardHP = {

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import timedelta
 
@@ -10,9 +9,9 @@ from app.services.daily_miss_service import snapshot_daily_misses_for_date
 log = logging.getLogger(__name__)
 
 
-def schedule_daily_miss_job() -> None:
+async def schedule_daily_miss_job() -> None:
     try:
-        asyncio.run(_run())
+        await _run()
     except Exception:
         log.exception("Daily miss job failed")
 

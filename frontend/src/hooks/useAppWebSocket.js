@@ -32,7 +32,12 @@ export function useAppWebSocket({
       try {
         const data = JSON.parse(evt.data);
         if (data.type && data.type !== "system.connected" && data.type !== "system.pong") {
-          setToasts((prev) => [...prev.slice(-3), { id: Date.now() + Math.random(), text: renderEventText(data) }]);
+          // Suppress per-lead toasts: bulk Excel uploads emit one event per row,
+          // which spams the corner. The "upload finished" notification still arrives
+          // via notification.created and is shown.
+          if (!String(data.type).startsWith("lead.")) {
+            setToasts((prev) => [...prev.slice(-3), { id: Date.now() + Math.random(), text: renderEventText(data) }]);
+          }
           if (loadDebounceRef.current) clearTimeout(loadDebounceRef.current);
           loadDebounceRef.current = setTimeout(() => {
             loadDebounceRef.current = null;

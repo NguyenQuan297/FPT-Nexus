@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -56,7 +56,7 @@ async def _seed_admin_if_needed() -> None:
         await db.commit()
         log.info("Seeded admin user '%s'", uname)
 
-scheduler = BackgroundScheduler()
+scheduler = AsyncIOScheduler()
 _worker_stop: Optional[asyncio.Event] = None
 _worker_task: Optional[asyncio.Task] = None
 _rt_stop: Optional[asyncio.Event] = None
@@ -121,6 +121,7 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     scheduler.shutdown(wait=False)
+    await engine.dispose()
 
 
 app = FastAPI(title="Lead Management API", lifespan=lifespan)

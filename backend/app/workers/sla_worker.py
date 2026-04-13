@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from app.db.session import AsyncSessionLocal
@@ -19,9 +18,9 @@ async def run_sla_job_async() -> int:
     return n
 
 
-def schedule_sla_job() -> None:
-    """Entry point for APScheduler (sync)."""
+async def schedule_sla_job() -> None:
+    """Entry point for AsyncIOScheduler — runs in the FastAPI event loop."""
     try:
-        asyncio.run(run_sla_job_async())
+        await run_sla_job_async()
     except Exception:
         log.exception("SLA worker job failed")

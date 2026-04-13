@@ -31,6 +31,7 @@ export default function DashboardTab({
   onOpenLeads,
   nowLabel,
   report,
+  totalReport,
 }) {
   const [period, setPeriod] = useState("7d");
   const [localProgress, setLocalProgress] = useState(chartProgress);
@@ -111,14 +112,20 @@ export default function DashboardTab({
         </div>
       </motion.div>
 
-      {overdueCount > 0 && (
-        <div style={styles.banner}>
-          Cảnh báo: {overdueCount} lead đang quá hạn SLA.{" "}
-          <button style={styles.linkBtn} onClick={onOpenLeads}>
-            Xem danh sách
-          </button>
-        </div>
-      )}
+      {(() => {
+        // Use the global "total" report for the warning so that the banner reflects
+        // the entire dataset, not whatever filter the Leads tab last applied.
+        const globalOverdue = totalReport?.overdue_leads ?? 0;
+        if (globalOverdue <= 0) return null;
+        return (
+          <div style={styles.banner}>
+            Cảnh báo: {globalOverdue} lead đang quá hạn SLA.{" "}
+            <button style={styles.linkBtn} onClick={onOpenLeads}>
+              Xem danh sách
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Charts Section */}
       <motion.section
@@ -211,8 +218,8 @@ export default function DashboardTab({
         </AnimatePresence>
       </motion.section>
 
-      {/* Conversion & Status Breakdown Tables */}
-      {report && (
+      {/* Conversion & Status Breakdown Tables — always reflect the full dataset. */}
+      {(totalReport || report) && (
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -225,16 +232,18 @@ export default function DashboardTab({
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 <div style={{ width: 3, height: 18, borderRadius: 2, background: "#22c55e" }} />
                 <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Chuyển đổi theo tư vấn viên</h4>
+                <span style={{ marginLeft: "auto", fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>Báo cáo tổng</span>
               </div>
-              <ConversionMiniTable data={(report.conversion_by_assignee || []).filter(r => r.assignee !== "Chưa gán" && isHP(r.assignee))} />
+              <ConversionMiniTable data={((totalReport || report).conversion_by_assignee || []).filter(r => r.assignee !== "Chưa gán" && isHP(r.assignee))} />
             </div>
             {/* Status breakdown table */}
             <div style={{ ...styles.card, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 <div style={{ width: 3, height: 18, borderRadius: 2, background: "#6366f1" }} />
                 <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Trạng thái lead theo nhân sự</h4>
+                <span style={{ marginLeft: "auto", fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>Báo cáo tổng</span>
               </div>
-              <StatusMiniTable data={(report.status_breakdown || []).filter(r => r.assignee !== "Chưa gán" && isHP(r.assignee))} />
+              <StatusMiniTable data={((totalReport || report).status_breakdown || []).filter(r => r.assignee !== "Chưa gán" && isHP(r.assignee))} />
             </div>
           </div>
         </motion.section>

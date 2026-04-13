@@ -540,6 +540,91 @@ function buildCallStatusSheet(wb, data, dateFrom, dateTo) {
   ws.views = [{ state: "frozen", xSplit: 1, ySplit: 3 }];
 }
 
+// ── Sheet: Lead trễ theo người ─────────────────────────────────────────────
+function buildLateLeadsSheet(wb, sla, dateFrom, dateTo) {
+  const ws = wb.addWorksheet("Lead trễ theo người", { properties: { tabColor: { argb: "FFDC2626" } } });
+  const colCount = 3;
+  ws.columns = [{ width: 38 }, { width: 18 }, { width: 18 }];
+
+  addSheetTitle(ws, "DANH SÁCH LEAD TRỄ SLA THEO NGƯỜI", colCount, dateFrom, dateTo);
+
+  ws.getRow(3).height = 22;
+  ["Người phụ trách", "Cơ sở", "Số lead trễ"].forEach((h, c) => {
+    const cell = ws.getRow(3).getCell(c + 1);
+    cell.value = h;
+    cell.style = headerStyle(C.headerBg);
+  });
+
+  const lateOnly = (sla || []).filter((r) => (r.lateLeads || 0) > 0);
+  const hp = lateOnly.filter((r) => isHaiPhong(r.name));
+  const other = lateOnly.filter((r) => !isHaiPhong(r.name));
+  let rowIdx = 4;
+
+  const addGroupHeader = (label) => {
+    ws.mergeCells(rowIdx, 1, rowIdx, colCount);
+    const cell = ws.getRow(rowIdx).getCell(1);
+    cell.value = label;
+    cell.style = {
+      font: { bold: true, size: 9, color: { argb: C.headerFg }, name: "Calibri" },
+      fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FF334155" } },
+      alignment: { horizontal: "left", vertical: "middle", indent: 1 },
+    };
+    ws.getRow(rowIdx).height = 16;
+    rowIdx++;
+  };
+
+  const addEmptyRow = () => {
+    ws.mergeCells(rowIdx, 1, rowIdx, colCount);
+    const cell = ws.getRow(rowIdx).getCell(1);
+    cell.value = "Không có lead trễ";
+    cell.style = {
+      font: { italic: true, color: { argb: C.slateFg }, name: "Calibri", size: 10 },
+      fill: { type: "pattern", pattern: "solid", fgColor: { argb: C.rowBase } },
+      alignment: { horizontal: "center", vertical: "middle" },
+    };
+    ws.getRow(rowIdx).height = 18;
+    rowIdx++;
+  };
+
+  const addDataRow = (r, i) => {
+    const bg = i % 2 === 0 ? C.rowBase : C.rowAlt;
+    const row = ws.getRow(rowIdx);
+    row.height = 18;
+    row.getCell(1).value = r.name;
+    row.getCell(1).style = cellStyle(bg, "FF1F2937", false, "left");
+    row.getCell(2).value = isHaiPhong(r.name) ? "FSC Hải Phòng" : "Cơ sở khác";
+    row.getCell(2).style = cellStyle(
+      isHaiPhong(r.name) ? "FFFFF7ED" : bg,
+      isHaiPhong(r.name) ? "FFC2410C" : C.slateFg,
+      false,
+      "center"
+    );
+    row.getCell(3).value = `${r.lateLeads} lead`;
+    row.getCell(3).style = cellStyle(bg, C.redFg, true, "center");
+    rowIdx++;
+  };
+
+  addGroupHeader("▸  FSC HẢI PHÒNG");
+  if (hp.length === 0) addEmptyRow();
+  else hp.forEach((r, i) => addDataRow(r, i));
+
+  addGroupHeader("▸  CƠ SỞ KHÁC");
+  if (other.length === 0) addEmptyRow();
+  else other.forEach((r, i) => addDataRow(r, i));
+
+  const totLate = lateOnly.reduce((s, r) => s + (r.lateLeads || 0), 0);
+  const row = ws.getRow(rowIdx);
+  row.height = 22;
+  row.getCell(1).value = `TỔNG (${lateOnly.length} người có lead trễ)`;
+  row.getCell(1).style = totalsStyle(C.totFg, "left");
+  row.getCell(2).value = "";
+  row.getCell(2).style = totalsStyle(C.totFg);
+  row.getCell(3).value = `${totLate} lead`;
+  row.getCell(3).style = totalsStyle(C.redFg);
+
+  ws.views = [{ state: "frozen", xSplit: 0, ySplit: 3 }];
+}
+
 // ── Main export function ────────────────────────────────────────────────────
 export async function exportReportExcel({ slaData, conversionData, statusBreakdown, callStatusBreakdown, dateFrom, dateTo }) {
   const wb = new ExcelJS.Workbook();
@@ -549,6 +634,7 @@ export async function exportReportExcel({ slaData, conversionData, statusBreakdo
 
   buildSummarySheet(wb, slaData, conversionData, dateFrom, dateTo);
   buildSLASheet(wb, slaData, dateFrom, dateTo);
+  buildLateLeadsSheet(wb, slaData, dateFrom, dateTo);
   buildConversionSheet(wb, conversionData, dateFrom, dateTo);
   if (statusBreakdown.length > 0) {
     buildStatusBreakdownSheet(wb, statusBreakdown, dateFrom, dateTo);

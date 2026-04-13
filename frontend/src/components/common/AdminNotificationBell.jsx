@@ -62,7 +62,10 @@ export default function AdminNotificationBell({ notifs, loadNotifs, setErr }) {
           boxShadow: "0 2px 8px rgba(91, 33, 182, 0.12)",
         }}
       >
-        <span style={{ fontSize: 20, lineHeight: 1 }}>🔔</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#312e81" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
         <span style={{ fontWeight: 800, color: "#312e81", fontSize: 15, minWidth: 14, textAlign: "center" }}>
           {unread}
         </span>
