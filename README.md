@@ -3,7 +3,7 @@
 Internal lead operations system for FPT School Hải Phòng. Turns Excel lead lists into a live workflow so admins and sales can assign, track, and report on prospective students in one place.
 
 **Live demo:** http://18.118.211.15:8000/
-**Demo Excel file:** [DanhSachKhachHangDemo.xlsx](file:///c:/Users/Admin/Downloads/DanhSachKhachHangDemo.xlsx)
+**Demo Excel file:** [DanhSachKhachHangDemo.xlsx](demo-data/DanhSachKhachHangDemo.xlsx)
 
 **Demo account**
 - Username: `quan123`
