@@ -17,7 +17,31 @@ from app.schemas.reports import (
     SaleMonthlySlice,
     StatusBreakdownRow,
 )
-from app.services.sla_service import is_lead_overdue
+from app.services.sla_service import sla_deadline
+
+# Match the dashboard / lead-list "Quá hạn" definition: a lead is overdue when
+# its call-status label still reads "Chưa gọi" / "Chưa liên hệ" (or status="new")
+# and the SLA window has elapsed. Using `last_contact_at IS NULL` here would
+# disagree with the lead list because Excel ingest can populate `last_contact_at`
+# from notes even for leads whose call status is still "Chưa liên hệ".
+_NO_CONTACT_LABELS = {"", norm_call_label("Chưa gọi"), norm_call_label("Chưa liên hệ")}
+
+
+def _lead_is_uncontacted(lead) -> bool:
+    if lead.status == "closed":
+        return False
+    extra = lead.extra if isinstance(lead.extra, dict) else None
+    label = norm_call_label(lead_extra_call_status_label(extra))
+    return label in _NO_CONTACT_LABELS or lead.status == "new"
+
+
+def _lead_is_overdue(lead, now: datetime) -> bool:
+    if not _lead_is_uncontacted(lead):
+        return False
+    created = lead.created_at
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return sla_deadline(created, lead.sla_hours_at_ingest) < now
 
 lead_repo = LeadRepository()
 user_repo = UserRepository()
@@ -194,17 +218,7 @@ async def _build_report(
 ) -> MonthlyReportOut:
     total_leads_created = len(leads)
     now = datetime.now(timezone.utc)
-    overdue_leads = [
-        L
-        for L in leads
-        if is_lead_overdue(
-            created_at=L.created_at,
-            last_contact_at=L.last_contact_at,
-            status=L.status,
-            sla_hours=L.sla_hours_at_ingest,
-            now=now,
-        )
-    ]
+    overdue_leads = [L for L in leads if _lead_is_overdue(L, now)]
     total_overdue = len(overdue_leads)
     sla_compliance_pct = (
         round(((total_leads_created - total_overdue) / total_leads_created) * 100.0, 2)
@@ -250,17 +264,7 @@ async def _build_report(
 
     for assignee, rows in sorted(grouped.items(), key=lambda x: x[0].lower()):
         branch = _detect_branch(assignee)
-        overdue = sum(
-            1
-            for L in rows
-            if is_lead_overdue(
-                created_at=L.created_at,
-                last_contact_at=L.last_contact_at,
-                status=L.status,
-                sla_hours=L.sla_hours_at_ingest,
-                now=now,
-            )
-        )
+        overdue = sum(1 for L in rows if _lead_is_overdue(L, now))
         compliance = round(((len(rows) - overdue) / len(rows)) * 100.0, 2) if rows else 100.0
         by_sale.append(
             SaleMonthlySlice(
